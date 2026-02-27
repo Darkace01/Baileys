@@ -243,28 +243,31 @@ public static class Crypto
         ReadOnlySpan<byte> key,
         ReadOnlySpan<byte> iv)
     {
-        // .NET's AES class does not expose CTR mode directly on all platforms;
-        // we implement the counter manually using ECB-encrypted counter blocks.
-        using var aes = Aes.Create();
-        aes.KeySize = 256;
-        aes.Mode = CipherMode.ECB;
-        aes.Padding = PaddingMode.None;
-        aes.Key = key.ToArray();
-
+        // AES-CTR: encrypt each counter block with AES to produce key-stream bytes,
+        // then XOR with the input. We use CBC mode with a zero IV where the
+        // "plaintext" is the counter; AES-CBC(key, zeroIV, counter) == AES-ECB(key, counter)
+        // for a single block, which is the standard CTR key-stream construction.
+        // Note: we create a fresh cipher per block so the CBC feedback is never re-used.
         var output = new byte[input.Length];
         var counter = iv.ToArray();          // 16-byte counter block
-        var keyStream = new byte[16];
+        var zeroIv = new byte[16];
 
         for (int offset = 0; offset < input.Length; offset += 16)
         {
-            // Encrypt the current counter block to produce 16 key-stream bytes.
+            // Encrypt a single counter block (CBC single-block == ECB for that block).
+            using var aes = Aes.Create();
+            aes.KeySize = 256;
+            aes.Mode = CipherMode.CBC;
+            aes.Padding = PaddingMode.None;
+            aes.Key = key.ToArray();
+            aes.IV = zeroIv;
+
             using var enc = aes.CreateEncryptor();
             var ksBlock = enc.TransformFinalBlock(counter, 0, 16);
-            keyStream = ksBlock;
 
             int blockLen = Math.Min(16, input.Length - offset);
             for (int i = 0; i < blockLen; i++)
-                output[offset + i] = (byte)(input[offset + i] ^ keyStream[i]);
+                output[offset + i] = (byte)(input[offset + i] ^ ksBlock[i]);
 
             // Increment counter (big-endian) for each block.
             IncrementCounter(counter);

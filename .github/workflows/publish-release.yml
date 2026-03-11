@@ -10,6 +10,7 @@ permissions: write-all
 jobs:
   publish-release:
     runs-on: ubuntu-latest
+    if: "!endsWith(github.ref_name, '-dotnet')"
     steps:
       - name: Checkout
         uses: actions/checkout@v3

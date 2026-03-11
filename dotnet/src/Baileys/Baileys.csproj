@@ -6,17 +6,34 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
 
-    <!-- NuGet Package Metadata -->
+    <!-- ── NuGet Package Metadata ─────────────────────────── -->
     <PackageId>Baileys</PackageId>
     <Version>7.0.0</Version>
-    <Authors>Rajeh Taher</Authors>
-    <Description>A WebSockets library for interacting with WhatsApp Web (.NET port)</Description>
-    <PackageTags>whatsapp;automation;websockets;baileys</PackageTags>
+    <Authors>WhiskeySockets;Rajeh Taher</Authors>
+    <Description>
+      A .NET 10 port of the Baileys WhatsApp Web library.
+      Provides the WABinary codec, crypto utilities, JID helpers, Noise protocol
+      handler, auth credential initialisation, and complete WhatsApp type definitions.
+      Zero external dependencies — all crypto uses System.Security.Cryptography.
+    </Description>
+    <PackageTags>whatsapp;whatsapp-web;automation;websockets;baileys;noise-protocol;signal-protocol</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/WhiskeySockets/Baileys</PackageProjectUrl>
     <RepositoryUrl>https://github.com/WhiskeySockets/Baileys</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>1591</NoWarn>
+
+    <!-- ── Pack settings ─────────────────────────────────── -->
+    <IsPackable>true</IsPackable>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
 </Project>

@@ -58,11 +58,11 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore NuGet packages
-        run: dotnet restore ${{ env.PROJECT_PATH }}
+        run: dotnet restore dotnet/Baileys.slnx
 
       - name: Build (Release)
         run: >
-          dotnet build ${{ env.PROJECT_PATH }}
+          dotnet build dotnet/Baileys.slnx
           --configuration Release
           --no-restore
 

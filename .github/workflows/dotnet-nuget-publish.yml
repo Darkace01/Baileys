@@ -1,4 +1,4 @@
-name: .NET – Build, Test & Publish to NuGet
+name: Baileys.NET – Build, Test & Publish to NuGet
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  Triggers
@@ -44,7 +44,7 @@ jobs:
   #  Runs on every push / PR.  Verifies the library compiles and all tests pass.
   # ───────────────────────────────────────────────────────────────────────────
   build-and-test:
-    name: Build & Test (.NET 10)
+    name: Baileys.NET Build & Test (.NET 10)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -87,7 +87,7 @@ jobs:
   #  Waits for build-and-test to succeed before publishing.
   # ───────────────────────────────────────────────────────────────────────────
   pack-and-publish:
-    name: Pack & Publish to NuGet.org
+    name: Baileys.NET Pack & Publish to NuGet.org
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: build-and-test
@@ -153,7 +153,7 @@ jobs:
       - name: Upload .nupkg as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nuget-packages
+          name: baileys-net-nuget-packages
           path: ./nupkg/
 
       - name: Create GitHub Release

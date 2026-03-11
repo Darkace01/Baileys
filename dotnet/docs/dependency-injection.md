@@ -216,7 +216,7 @@ Or supply values via environment variables (useful in Docker / Kubernetes):
 ```bash
 # Environment variable overrides (double-underscore for hierarchy)
 BAILEYS__PHONENUMBER=15551234567
-BAILEYS__RETRYREQUESTEDALAYMS=5000
+BAILEYS__RETRYREQUESTDELAYMS=5000
 ```
 
 ---

@@ -97,7 +97,7 @@ var provider = new FileAuthStateProvider("/var/data/whatsapp/creds.json");
 }
 ```
 
-All `byte[]` fields are stored as **Base64** strings. The file is written atomically (create/overwrite) on every `SaveCredsAsync` call.
+All `byte[]` fields are stored as **Base64** strings. The file is overwritten on every `SaveCredsAsync` call.
 
 | Advantage | Limitation |
 |---|---|

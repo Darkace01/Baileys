@@ -88,12 +88,24 @@ public static partial class JidUtils
         // Split on ':' for device
         var colonIdx = userCombined.IndexOf(':');
         string userAgent = colonIdx >= 0 ? userCombined[..colonIdx] : userCombined;
-        int? device = colonIdx >= 0 ? int.Parse(userCombined[(colonIdx + 1)..]) : null;
+        int? device = null;
+        if (colonIdx >= 0)
+        {
+            if (!int.TryParse(userCombined[(colonIdx + 1)..], out int deviceVal))
+                return null;
+            device = deviceVal;
+        }
 
         // Split on '_' for agent / domain type
         var underIdx = userAgent.IndexOf('_');
         string user = underIdx >= 0 ? userAgent[..underIdx] : userAgent;
-        int? domainType = underIdx >= 0 ? int.Parse(userAgent[(underIdx + 1)..]) : null;
+        int? domainType = null;
+        if (underIdx >= 0)
+        {
+            if (!int.TryParse(userAgent[(underIdx + 1)..], out int domainVal))
+                return null;
+            domainType = domainVal;
+        }
 
         var server = serverStr switch
         {

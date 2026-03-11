@@ -83,18 +83,18 @@ Parses a JID string. Returns `null` when the input is null, empty, or malformed.
 
 ```csharp
 FullJid? jid = JidUtils.JidDecode("15551234567@s.whatsapp.net");
-// jid.User     → "15551234567"
-// jid.Server   → JidServer.SWhatsappNet
-// jid.Device   → null
-// jid.Agent    → null
+// jid.User       → "15551234567"
+// jid.Server     → JidServer.SWhatsappNet
+// jid.Device     → null
+// jid.DomainType → 0  (WaJidDomains.WhatsApp)
 
 FullJid? group = JidUtils.JidDecode("120363000000001@g.us");
 // group.User   → "120363000000001"
 // group.Server → JidServer.GroupUs
 
 FullJid? md = JidUtils.JidDecode("15551234567:3@s.whatsapp.net");
-// md.User      → "15551234567"
-// md.Device    → 3
+// md.User   → "15551234567"
+// md.Device → 3
 ```
 
 ---
@@ -119,18 +119,21 @@ All predicates return `false` for `null` or empty input.
 
 | Method | Returns `true` when … | Example input |
 |--------|----------------------|---------------|
-| `IsJidUser(jid)` | Server is `s.whatsapp.net` or `c.us` | `"123@s.whatsapp.net"` |
+| `IsPnUser(jid)` | Server is `s.whatsapp.net` | `"123@s.whatsapp.net"` |
+| `IsLidUser(jid)` | Server is `lid` | `"123@lid"` |
 | `IsJidGroup(jid)` | Server is `g.us` | `"120363…@g.us"` |
 | `IsJidBroadcast(jid)` | Server is `broadcast` | `"status@broadcast"` |
 | `IsJidStatusBroadcast(jid)` | JID is exactly `status@broadcast` | `"status@broadcast"` |
-| `IsLidUser(jid)` | Server is `lid` | `"123@lid"` |
-| `IsPnUser(jid)` | Server is `s.whatsapp.net` | `"123@s.whatsapp.net"` |
 | `IsJidNewsletter(jid)` | Server is `newsletter` | `"abc@newsletter"` |
+| `IsJidMetaAi(jid)` | JID ends with `@bot` | `"13135550002@bot"` |
+| `IsJidBot(jid)` | JID matches known bot number pattern | `"1313555XXXX@c.us"` |
+| `IsHostedPnUser(jid)` | Server is `hosted` | `"123@hosted"` |
+| `IsHostedLidUser(jid)` | Server is `hosted.lid` | `"123@hosted.lid"` |
 | `AreJidsSameUser(jid1, jid2)` | Normalised users are equal | Compare two JID variants |
 
 ```csharp
 JidUtils.IsJidGroup("120363000000001@g.us");    // true
-JidUtils.IsJidUser("15551234567@c.us");          // true
+JidUtils.IsPnUser("15551234567@s.whatsapp.net"); // true
 JidUtils.IsJidBroadcast("status@broadcast");     // true
 JidUtils.IsJidNewsletter("abc123@newsletter");   // true
 JidUtils.IsLidUser("12345@lid");                 // true
@@ -167,8 +170,8 @@ JidUtils.ServerFromString("unknown");     // JidServer.ContactUs (fallback)
 namespace Baileys.Types;
 
 public sealed record FullJid(
-    string?    User,
+    string     User,
     JidServer  Server,
-    int?       Device = null,
-    int?       Agent  = null);
+    int?       Device     = null,
+    int?       DomainType = null);
 ```

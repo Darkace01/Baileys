@@ -67,27 +67,40 @@ byte[] pt = Crypto.AesDecryptGcm(ct, key, iv, ReadOnlySpan<byte>.Empty);
 
 ## AES-256-CBC
 
-AES with Cipher Block Chaining — requires a 16-byte IV. Used for historical media decryption.
+AES with Cipher Block Chaining. Keys must be **32 bytes**; IVs must be **16 bytes**. Used for legacy media decryption.
 
-### `AesDecryptCbc(ciphertext, key, iv, unpad) → byte[]`
+### `AesEncrypt(plaintext, key) → byte[]`
 
-| Parameter | Description |
-|---|---|
-| `ciphertext` | Encrypted bytes (length must be a multiple of 16) |
-| `key` | 32-byte AES key |
-| `iv` | 16-byte IV |
-| `unpad` | When `true`, removes PKCS#7 padding from the result |
+Pads with PKCS#7, generates a random 16-byte IV, prepends it to the output, and returns `iv ++ ciphertext`.
 
 ```csharp
-byte[] pt = Crypto.AesDecryptCbc(ciphertext, key, iv, unpad: true);
+byte[] ct = Crypto.AesEncrypt(plaintext, key);
+// ct[..16] = random IV, ct[16..] = ciphertext
 ```
 
-### `AesEncryptCbc(plaintext, key, iv) → byte[]`
+### `AesDecrypt(buffer, key) → byte[]`
 
-Pads with PKCS#7 automatically.
+Reads the IV from the first 16 bytes of `buffer`, then decrypts and un-pads the remainder.
 
 ```csharp
-byte[] ct = Crypto.AesEncryptCbc(plaintext, key, iv);
+byte[] pt = Crypto.AesDecrypt(ct, key);
+```
+
+### `AesEncryptWithIv(plaintext, key, iv) → byte[]`
+
+Encrypts without prepending the IV — caller supplies the IV explicitly.
+
+```csharp
+byte[] iv = Crypto.RandomBytes(16);
+byte[] ct = Crypto.AesEncryptWithIv(plaintext, key, iv);
+```
+
+### `AesDecryptWithIv(ciphertext, key, iv) → byte[]`
+
+Decrypts when the IV is known separately.
+
+```csharp
+byte[] pt = Crypto.AesDecryptWithIv(ct, key, iv);
 ```
 
 ---
@@ -148,26 +161,25 @@ byte[] hash = Crypto.Md5(data);
 
 ## HKDF (RFC 5869)
 
-Extracts and expands key material.
+Extracts and expands key material using HKDF-SHA-256.
 
-### `HkdfSha256(ikm, length, salt, info) → byte[]`
+### `Hkdf(inputKeyMaterial, outputLength, salt, info) → byte[]`
 
 | Parameter | Description |
 |---|---|
-| `ikm` | Input key material |
-| `length` | Number of output bytes to produce |
-| `salt` | Optional salt bytes (`null` → all-zero salt) |
-| `info` | Context / info bytes |
+| `inputKeyMaterial` | The IKM (e.g. a shared secret) |
+| `outputLength` | Number of output bytes to produce |
+| `salt` | Optional salt (`default` → all-zero salt) |
+| `info` | Optional context bytes |
 
 ```csharp
-// Derive a 64-byte output
-byte[] keys = Crypto.HkdfSha256(
-    ikm:    sharedSecret,
-    length: 64,
-    salt:   null,
-    info:   "WhatsApp Handshake"u8);
+// Derive a 64-byte key from a Diffie-Hellman shared secret
+byte[] keys = Crypto.Hkdf(
+    inputKeyMaterial: sharedSecret,
+    outputLength:     64,
+    info:             "WhatsApp Handshake"u8);
 
-// Split into write/read key pairs
+// Split into write/read key pair
 byte[] writeKey = keys[..32];
 byte[] readKey  = keys[32..];
 ```
@@ -178,14 +190,14 @@ byte[] readKey  = keys[32..];
 
 Password-based key derivation (used for pairing-code flow).
 
-### `Pbkdf2HmacSha256(password, salt, iterations, keyLength) → byte[]`
+### `DerivePairingCodeKey(pairingCode, salt) → byte[]`
+
+Derives a 32-byte key using PBKDF2-SHA-256 with 131 072 iterations — matches the TypeScript `derivePairingCodeKey` function.
 
 ```csharp
-byte[] key = Crypto.Pbkdf2HmacSha256(
-    password:  passwordBytes,
-    salt:      saltBytes,
-    iterations: 2 << 16,
-    keyLength:  32);
+byte[] key = Crypto.DerivePairingCodeKey(
+    pairingCode: "ABCD-1234",
+    salt:        saltBytes);
 ```
 
 ---

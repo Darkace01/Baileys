@@ -243,33 +243,28 @@ public static class Crypto
         ReadOnlySpan<byte> key,
         ReadOnlySpan<byte> iv)
     {
-        // AES-CTR: encrypt each counter block with AES to produce key-stream bytes,
-        // then XOR with the input. We use CBC mode with a zero IV where the
-        // "plaintext" is the counter; AES-CBC(key, zeroIV, counter) == AES-ECB(key, counter)
-        // for a single block, which is the standard CTR key-stream construction.
-        // Note: we create a fresh cipher per block so the CBC feedback is never re-used.
+        // AES-CTR: encrypt each counter block with AES-ECB to produce key-stream bytes,
+        // then XOR with the input.  A single Aes instance is created once for the entire
+        // call and reused across all blocks to avoid the per-block allocation overhead.
         var output = new byte[input.Length];
         var counter = iv.ToArray();          // 16-byte counter block
-        var zeroIv = new byte[16];
+        var ksBlock = new byte[16];
+
+        using var aes = Aes.Create();
+        aes.KeySize = 256;
+        aes.Key = key.ToArray();
 
         for (int offset = 0; offset < input.Length; offset += 16)
         {
-            // Encrypt a single counter block (CBC single-block == ECB for that block).
-            using var aes = Aes.Create();
-            aes.KeySize = 256;
-            aes.Mode = CipherMode.CBC;
-            aes.Padding = PaddingMode.None;
-            aes.Key = key.ToArray();
-            aes.IV = zeroIv;
-
-            using var enc = aes.CreateEncryptor();
-            var ksBlock = enc.TransformFinalBlock(counter, 0, 16);
+            // TryEncryptEcb encrypts a single block without padding in one call,
+            // reusing the same cipher state.
+            aes.TryEncryptEcb(counter, ksBlock, PaddingMode.None, out _);
 
             int blockLen = Math.Min(16, input.Length - offset);
             for (int i = 0; i < blockLen; i++)
                 output[offset + i] = (byte)(input[offset + i] ^ ksBlock[i]);
 
-            // Increment counter (big-endian) for each block.
+            // Increment counter (big-endian) for the next block.
             IncrementCounter(counter);
         }
 

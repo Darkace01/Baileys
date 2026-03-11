@@ -36,6 +36,11 @@ public static class WaBinaryDecoder
 
     private static async Task<byte[]> DecompressIfRequiredAsync(byte[] buffer)
     {
+        if (buffer is null || buffer.Length < 2)
+            throw new ArgumentException(
+                "Buffer too short to be a valid binary node frame (must be at least 2 bytes: 1 flag byte + payload).",
+                nameof(buffer));
+
         if ((buffer[0] & 2) != 0)
         {
             // inflate (zlib)

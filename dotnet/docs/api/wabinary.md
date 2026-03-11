@@ -28,34 +28,67 @@ public sealed class BinaryNode
     // String attributes on the element
     public Dictionary<string, string> Attrs { get; init; } = new();
 
-    // Content — one of:
-    //   null                         → no content
-    //   IReadOnlyList<BinaryNode>    → child nodes
-    //   byte[]                       → raw bytes
-    //   string                       → plain text
-    public object? Content { get; init; }
+    // Content is a discriminated union — one of:
+    //   null              → no content
+    //   BinaryNodeList    → child nodes  (.Children: IReadOnlyList<BinaryNode>)
+    //   BinaryNodeString  → plain text   (.Value: string)
+    //   BinaryNodeBytes   → raw binary   (.Data: byte[])
+    public BinaryNodeContent? Content { get; init; }
+}
+```
+
+### Content Hierarchy
+
+```csharp
+// BinaryNodeContent is an abstract base class
+public abstract class BinaryNodeContent { }
+
+// Child nodes
+public sealed class BinaryNodeList(IReadOnlyList<BinaryNode> children) : BinaryNodeContent
+{
+    public IReadOnlyList<BinaryNode> Children { get; }
+}
+
+// Plain text
+public sealed class BinaryNodeString(string value) : BinaryNodeContent
+{
+    public string Value { get; }
+}
+
+// Raw bytes
+public sealed class BinaryNodeBytes(byte[] data) : BinaryNodeContent
+{
+    public byte[] Data { get; }
 }
 ```
 
 ### Content Helpers
 
 ```csharp
+using Baileys.Types;
+
 // Check and access content by type
-if (node.Content is IReadOnlyList<BinaryNode> children)
+if (node.Content is BinaryNodeList list)
 {
-    foreach (var child in children)
+    foreach (var child in list.Children)
         Console.WriteLine(child.Tag);
 }
 
-if (node.Content is byte[] bytes)
+if (node.Content is BinaryNodeBytes bytes)
 {
-    Console.WriteLine($"{bytes.Length} raw bytes");
+    Console.WriteLine($"{bytes.Data.Length} raw bytes");
 }
 
-if (node.Content is string text)
+if (node.Content is BinaryNodeString str)
 {
-    Console.WriteLine(text);
+    Console.WriteLine(str.Value);
 }
+
+// Extension helpers (no pattern matching needed)
+IEnumerable<BinaryNode> children = BinaryNodeExtensions.GetChildren(node);
+BinaryNode?             child    = BinaryNodeExtensions.GetChild(node, "pair-device");
+byte[]?                 rawData  = BinaryNodeExtensions.GetBytes(node);
+string?                 text     = BinaryNodeExtensions.GetString(node);
 ```
 
 ---
@@ -89,28 +122,28 @@ byte[] wire = WaBinaryEncoder.EncodeBinaryNode(node);
 ```
 
 ```csharp
-// Node with child nodes
+// Node with child nodes (BinaryNodeList content)
 var outer = new BinaryNode
 {
     Tag     = "stream:features",
     Attrs   = new(),
-    Content = new List<BinaryNode>
+    Content = new BinaryNodeList(new List<BinaryNode>
     {
-        new() { Tag = "sm", Attrs = new() { ["xmlns"] = "urn:ietf:params:xml:ns:xmpp-session" } },
+        new() { Tag = "sm",  Attrs = new() { ["xmlns"] = "urn:ietf:params:xml:ns:xmpp-session" } },
         new() { Tag = "ver", Attrs = new() { ["xmlns"] = "urn:xmpp:features:rosterver" } }
-    }
+    })
 };
 
 byte[] wire = WaBinaryEncoder.EncodeBinaryNode(outer);
 ```
 
 ```csharp
-// Node with raw bytes as content
+// Node with raw bytes as content (BinaryNodeBytes)
 var mediaNode = new BinaryNode
 {
     Tag     = "binary",
     Attrs   = new() { ["enc"] = "v2" },
-    Content = encryptedPayload   // byte[]
+    Content = new BinaryNodeBytes(encryptedPayload)
 };
 
 byte[] wire = WaBinaryEncoder.EncodeBinaryNode(mediaNode);
@@ -170,23 +203,23 @@ var node = new BinaryNode
         ["type"] = "set",
         ["to"]   = "s.whatsapp.net"
     },
-    Content = new List<BinaryNode>
+    Content = new BinaryNodeList(new List<BinaryNode>
     {
         new()
         {
             Tag   = "pair-device",
             Attrs = new() { ["xmlns"] = "md" },
-            Content = new List<BinaryNode>
+            Content = new BinaryNodeList(new List<BinaryNode>
             {
                 new()
                 {
                     Tag     = "device-identity",
                     Attrs   = new(),
-                    Content = deviceIdentityBytes   // byte[]
+                    Content = new BinaryNodeBytes(deviceIdentityBytes)
                 }
-            }
+            })
         }
-    }
+    })
 };
 
 // Encode
@@ -196,23 +229,23 @@ byte[] wire = WaBinaryEncoder.EncodeBinaryNode(node);
 BinaryNode decoded = await WaBinaryDecoder.DecodeBinaryNodeAsync(wire);
 
 // Verify
-Assert.Equal("iq",           decoded.Tag);
-Assert.Equal("set",          decoded.Attrs["type"]);
+Assert.Equal("iq",             decoded.Tag);
+Assert.Equal("set",            decoded.Attrs["type"]);
 Assert.Equal("s.whatsapp.net", decoded.Attrs["to"]);
 
-var children = (IReadOnlyList<BinaryNode>)decoded.Content!;
-Assert.Equal("pair-device", children[0].Tag);
+var list = (BinaryNodeList)decoded.Content!;
+Assert.Equal("pair-device", list.Children[0].Tag);
 ```
 
 ---
 
 ## Message ID Generation
 
-`Generics.GenerateMessageId()` produces a unique message ID string in WhatsApp's format (`"3EB0"` prefix + 8 Crockford base-32 characters):
+`Generics.GenerateMessageId()` produces a unique message ID string in WhatsApp's format (`"3EB0"` prefix + 36 hexadecimal characters, representing 18 random bytes):
 
 ```csharp
 using Baileys.Utils;
 
 string id = Generics.GenerateMessageId();
-// e.g. "3EB0A8B2C4D6E8F0"
+// e.g. "3EB0A8B2C4D6E8F0A1B2C3D4E5F60718293A4B5C"
 ```

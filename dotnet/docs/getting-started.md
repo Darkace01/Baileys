@@ -67,7 +67,7 @@ string normalised = JidUtils.JidNormalizedUser("15551234567:5@s.whatsapp.net");
 
 // JID predicates
 bool isGroup     = JidUtils.IsJidGroup("120363000000001@g.us");     // true
-bool isUser      = JidUtils.IsJidUser("15551234567@s.whatsapp.net"); // true
+bool isPnUser    = JidUtils.IsPnUser("15551234567@s.whatsapp.net");  // true
 bool isBroadcast = JidUtils.IsJidBroadcast("status@broadcast");      // true
 ```
 
@@ -97,10 +97,10 @@ byte[] ct = Crypto.AesEncryptGcm(
 byte[] pt = Crypto.AesDecryptGcm(ct, key, iv, ReadOnlySpan<byte>.Empty);
 
 // HMAC-SHA-256
-byte[] mac = Crypto.HmacSha256(data, key);
+byte[] mac = Crypto.HmacSha256(ct, key);
 
-// HKDF
-byte[] derived = Crypto.HkdfSha256(inputKeyMaterial, length: 32, salt: null, info: "WhatsApp Handshake"u8);
+// HKDF (key derivation)
+byte[] derived = Crypto.Hkdf(ct, outputLength: 32, info: "WhatsApp Handshake"u8);
 ```
 
 See the full reference: [Cryptography](api/crypto.md)

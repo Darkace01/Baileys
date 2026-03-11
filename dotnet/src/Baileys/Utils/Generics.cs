@@ -64,6 +64,7 @@ public static class Generics
 
     /// <summary>
     /// Removes the PKCS#7-style padding written by <see cref="WriteRandomPadMax16"/>.
+    /// All padding bytes are validated to equal the pad length.
     /// </summary>
     /// <exception cref="InvalidOperationException">When the padding is invalid.</exception>
     public static byte[] UnpadRandomMax16(ReadOnlySpan<byte> padded)
@@ -72,8 +73,16 @@ public static class Generics
             throw new InvalidOperationException("unpadPkcs7 given empty bytes");
 
         int pad = padded[^1];
-        if (pad > padded.Length)
+        if (pad == 0 || pad > 16 || pad > padded.Length)
             throw new InvalidOperationException($"unpad given {padded.Length} bytes, but pad is {pad}");
+
+        // Validate that every padding byte equals the pad value (full PKCS#7 check).
+        for (int i = padded.Length - pad; i < padded.Length; i++)
+        {
+            if (padded[i] != pad)
+                throw new InvalidOperationException(
+                    $"Invalid PKCS#7 padding: byte at position {i} is 0x{padded[i]:X2}, expected 0x{pad:X2}");
+        }
 
         return padded[..^pad].ToArray();
     }

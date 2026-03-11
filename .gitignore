@@ -10,6 +10,7 @@ browser-messages.json
 browser-token.json
 decoded-ws.json
 docs
+!dotnet/docs/
 lib
 messages*.json
 node_modules

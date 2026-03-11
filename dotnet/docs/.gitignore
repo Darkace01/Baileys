@@ -1,0 +1,6 @@
+# Allow all documentation files in this directory to be committed.
+# The root .gitignore has a broad "docs" rule (for the TypeScript generated docs)
+# but this directory contains hand-written Markdown and must be tracked.
+!*
+!*/
+!**/*.md

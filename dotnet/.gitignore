@@ -1,0 +1,11 @@
+# .NET build outputs
+bin/
+obj/
+
+# NuGet packages
+*.nupkg
+*.snupkg
+
+# User-specific files
+*.user
+.vs/

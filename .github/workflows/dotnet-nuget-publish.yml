@@ -1,0 +1,176 @@
+name: .NET – Build, Test & Publish to NuGet
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Triggers
+#
+#  CI (build + test):
+#    • Every push to master that touches dotnet/**
+#    • Every pull-request that touches dotnet/**
+#
+#  Publish to NuGet.org:
+#    • A tag that matches 'v*-dotnet'  (e.g. v7.0.0-dotnet)
+#      Tag the commit you want to release and the publish job runs automatically.
+#
+#  Required repository secret:
+#    NUGET_API_KEY  –  your nuget.org API key with push access to the Baileys package
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'dotnet/**'
+      - '.github/workflows/dotnet-nuget-publish.yml'
+    tags:
+      - 'v*-dotnet'
+  pull_request:
+    paths:
+      - 'dotnet/**'
+      - '.github/workflows/dotnet-nuget-publish.yml'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  PROJECT_PATH: dotnet/src/Baileys/Baileys.csproj
+  TEST_PROJECT_PATH: dotnet/tests/Baileys.Tests/Baileys.Tests.csproj
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  #  build-and-test
+  #  Runs on every push / PR.  Verifies the library compiles and all tests pass.
+  # ───────────────────────────────────────────────────────────────────────────
+  build-and-test:
+    name: Build & Test (.NET 10)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore NuGet packages
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      - name: Build (Release)
+        run: >
+          dotnet build ${{ env.PROJECT_PATH }}
+          --configuration Release
+          --no-restore
+
+      - name: Run xUnit tests
+        run: >
+          dotnet test ${{ env.TEST_PROJECT_PATH }}
+          --configuration Release
+          --no-build
+          --verbosity normal
+          --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/test-results.trx'
+
+  # ───────────────────────────────────────────────────────────────────────────
+  #  pack-and-publish
+  #  Runs only when a 'v*-dotnet' tag is pushed.
+  #  Waits for build-and-test to succeed before publishing.
+  # ───────────────────────────────────────────────────────────────────────────
+  pack-and-publish:
+    name: Pack & Publish to NuGet.org
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build-and-test
+
+    # Only publish on tag pushes; skip on branch pushes and PRs
+    if: startsWith(github.ref, 'refs/tags/v') && endsWith(github.ref, '-dotnet')
+
+    permissions:
+      contents: write   # needed to attach the .nupkg to the GitHub Release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore NuGet packages
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+      # Extract the semver from the tag, e.g. 'v7.1.0-dotnet' → '7.1.0'
+      - name: Derive package version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"            # e.g. v7.1.0-dotnet
+          VERSION="${TAG#v}"                  # strip leading 'v'  → 7.1.0-dotnet
+          VERSION="${VERSION%-dotnet}"        # strip trailing '-dotnet' → 7.1.0
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Packaging version: ${VERSION}"
+
+      - name: Build & Pack (Release)
+        run: >
+          dotnet pack ${{ env.PROJECT_PATH }}
+          --configuration Release
+          --no-restore
+          -p:Version=${{ steps.version.outputs.VERSION }}
+          --output ./nupkg
+
+      - name: Run xUnit tests against the packed release build
+        run: >
+          dotnet test ${{ env.TEST_PROJECT_PATH }}
+          --configuration Release
+          --no-build
+          --verbosity normal
+
+      - name: Push to NuGet.org
+        run: >
+          dotnet nuget push ./nupkg/*.nupkg
+          --api-key ${{ secrets.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: Push symbols (.snupkg) to NuGet.org
+        run: >
+          dotnet nuget push ./nupkg/*.snupkg
+          --api-key ${{ secrets.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+        continue-on-error: true   # symbols upload is best-effort
+
+      - name: Upload .nupkg as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ./nupkg/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Baileys .NET ${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Baileys .NET ${{ steps.version.outputs.VERSION }}
+
+            Published to NuGet.org: https://www.nuget.org/packages/Baileys/${{ steps.version.outputs.VERSION }}
+
+            ### Install
+
+            ```bash
+            dotnet add package Baileys --version ${{ steps.version.outputs.VERSION }}
+            ```
+          files: ./nupkg/*.nupkg
+          draft: false
+          prerelease: false

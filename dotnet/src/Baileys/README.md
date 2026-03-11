@@ -1,6 +1,6 @@
 # Baileys — WhatsApp Web Library for .NET 10
 
-[![NuGet](https://img.shields.io/nuget/v/Baileys.svg)](https://www.nuget.org/packages/Baileys)
+[![NuGet](https://img.shields.io/nuget/v/Baileys.NET.svg)](https://www.nuget.org/packages/Baileys.NET)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com)
 
@@ -9,13 +9,13 @@ A .NET 10 port of the [Baileys](https://github.com/WhiskeySockets/Baileys) TypeS
 ## Installation
 
 ```bash
-dotnet add package Baileys
+dotnet add package Baileys.NET
 ```
 
 Or via the NuGet Package Manager:
 
 ```
-Install-Package Baileys
+Install-Package Baileys.NET
 ```
 
 ## Documentation

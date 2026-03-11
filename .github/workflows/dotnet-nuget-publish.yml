@@ -8,11 +8,11 @@ name: .NET – Build, Test & Publish to NuGet
 #    • Every pull-request that touches dotnet/**
 #
 #  Publish to NuGet.org:
-#    • A tag that matches 'v*-dotnet'  (e.g. v7.0.0-dotnet)
+#    • A tag that matches 'v*-dotnet'  (e.g. v1.0.0-dotnet)
 #      Tag the commit you want to release and the publish job runs automatically.
 #
 #  Required repository secret:
-#    NUGET_API_KEY  –  your nuget.org API key with push access to the Baileys package
+#    NUGET_API_KEY  –  your nuget.org API key with push access to the Baileys.NET package
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -160,16 +160,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Baileys .NET ${{ steps.version.outputs.VERSION }}
+          name: Baileys.NET ${{ steps.version.outputs.VERSION }}
           body: |
-            ## Baileys .NET ${{ steps.version.outputs.VERSION }}
+            ## Baileys.NET ${{ steps.version.outputs.VERSION }}
 
-            Published to NuGet.org: https://www.nuget.org/packages/Baileys/${{ steps.version.outputs.VERSION }}
+            Published to NuGet.org: https://www.nuget.org/packages/Baileys.NET/${{ steps.version.outputs.VERSION }}
 
             ### Install
 
             ```bash
-            dotnet add package Baileys --version ${{ steps.version.outputs.VERSION }}
+            dotnet add package Baileys.NET --version ${{ steps.version.outputs.VERSION }}
             ```
           files: ./nupkg/*.nupkg
           draft: false

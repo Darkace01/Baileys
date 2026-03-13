@@ -2,7 +2,7 @@
 
 > **A .NET 10 port of the [Baileys](https://github.com/WhiskeySockets/Baileys) WhatsApp Web library.**
 
-[![NuGet](https://img.shields.io/nuget/v/Baileys.svg)](https://www.nuget.org/packages/Baileys)
+[![NuGet](https://img.shields.io/nuget/v/Baileys.NET.svg)](https://www.nuget.org/packages/Baileys.NET)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/WhiskeySockets/Baileys/blob/master/LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com)
 
@@ -28,10 +28,10 @@
 
 ## Overview
 
-The `Baileys` NuGet package provides all the building blocks needed to interact with the WhatsApp Web binary protocol from .NET:
+The `Baileys.NET` NuGet package provides all the building blocks needed to interact with the WhatsApp Web binary protocol from .NET:
 
 ```
-Baileys
+Baileys.NET
 ├── Types/          — All WhatsApp domain types (Auth, Chat, Contact, Group, …)
 ├── Utils/          — Crypto, JID, Auth, Noise protocol, Generics, Logging
 ├── WABinary/       — Binary protocol encoder/decoder
@@ -45,8 +45,8 @@ Baileys
 
 | Property | Value |
 |---|---|
-| **Package ID** | `Baileys` |
-| **Current Version** | 7.0.0 |
+| **Package ID** | `Baileys.NET` |
+| **Current Version** | 1.2.0 |
 | **Target Framework** | `net10.0` |
 | **License** | MIT |
 | **Runtime Dependencies** | `Microsoft.Extensions.DependencyInjection.Abstractions` 10.0.4, `Microsoft.Extensions.Options` 10.0.4 |
@@ -54,12 +54,12 @@ Baileys
 ## Installation
 
 ```bash
-dotnet add package Baileys
+dotnet add package Baileys.NET
 ```
 
 ```xml
 <!-- .csproj -->
-<PackageReference Include="Baileys" Version="7.0.0" />
+<PackageReference Include="Baileys.NET" Version="1.2.0" />
 ```
 
 ## Namespace Map

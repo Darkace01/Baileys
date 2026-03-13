@@ -1,10 +1,12 @@
-name: Update WhatsApp Version
+name: Update Baileys.NET Package Version
 
 on:
-  schedule:
-    # Run on the 1st of every month at 02:00 UTC
-    - cron: '0 0 * * 0'
   workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        description: 'New semantic version (e.g. 1.3.0)'
+        required: true
 
 permissions:
   contents: write
@@ -12,37 +14,40 @@ permissions:
 
 jobs:
   update-version:
+    name: Bump Baileys.NET version to ${{ github.event.inputs.version }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Setup Node and Corepack
-        uses: actions/setup-node@v3.6.0
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
         with:
-          node-version: 20.x
+          dotnet-version: '10.0.x'
 
-      - name: Enable Corepack and Set Yarn Version
+      - name: Validate semver input
         run: |
-          corepack enable
-          corepack prepare yarn@4.x --activate
+          VERSION="${{ github.event.inputs.version }}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid version '$VERSION'. Must be a semver string like 1.3.0"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - name: Restore Yarn Cache
-        uses: actions/cache@v3
-        id: yarn-cache
-        with:
-          path: .yarn/cache
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
+      - name: Update <Version> in Baileys.csproj
+        run: |
+          sed -i "s|<Version>.*</Version>|<Version>${VERSION}</Version>|" \
+            dotnet/src/Baileys/Baileys.csproj
+          echo "Updated to version $VERSION"
+          grep '<Version>' dotnet/src/Baileys/Baileys.csproj
 
-      - name: Install packages
-        run: yarn install --immutable
-
-      - name: Update WhatsApp Web Version
-        id: update_version
-        run: yarn update:version
+      - name: Build & test against the new version
+        run: |
+          dotnet restore dotnet/Baileys.slnx
+          dotnet build dotnet/Baileys.slnx --configuration Release --no-restore
+          dotnet test dotnet/tests/Baileys.Tests/Baileys.Tests.csproj \
+            --configuration Release --no-build --verbosity minimal
 
       - name: Check for changes
         id: check_changes
@@ -58,31 +63,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH_NAME="update-version/stable"
+          BRANCH_NAME="update-version/dotnet-v${VERSION}"
 
-          # Configure git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Check if branch exists and delete it
+          # Remove any existing branch with the same name
           git push origin --delete "$BRANCH_NAME" 2>/dev/null || true
 
-          # Create new branch, commit, and push
           git checkout -b "$BRANCH_NAME"
-          git add src/Defaults/baileys-version.json src/Defaults/index.ts src/Utils/generics.ts
-          git commit -m "chore: update WhatsApp Web version"
+          git add dotnet/src/Baileys/Baileys.csproj
+          git commit -m "chore: bump Baileys.NET version to ${VERSION}"
           git push origin "$BRANCH_NAME"
 
-          # Create PR using GitHub CLI
           gh pr create \
-            --title "chore: update WhatsApp Web version" \
-            --body "Automated WhatsApp Web version update.
-
-          This PR updates the WhatsApp Web client revision to the latest version fetched from \`web.whatsapp.com\`.
-
-          **Files updated:**
-          - \`src/Defaults/baileys-version.json\`
-          - \`src/Defaults/index.ts\`
-          - \`src/Utils/generics.ts\`" \
+            --title "chore: bump Baileys.NET version to ${VERSION}" \
+            --body-file - \
             --base master \
-            --head "$BRANCH_NAME" || echo "PR already exists or could not be created"
+            --head "$BRANCH_NAME" << PREOF || echo "PR already exists or could not be created"
+Automated version bump for the \`Baileys.NET\` NuGet package.
+
+**New version:** \`${VERSION}\`
+
+**File updated:**
+- \`dotnet/src/Baileys/Baileys.csproj\`
+
+After merging, push the tag \`v${VERSION}-dotnet\` to trigger the NuGet publish workflow.
+PREOF

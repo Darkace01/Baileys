@@ -14,13 +14,13 @@ This guide walks you from installing the package to establishing a valid set of 
 ## 1. Install the Package
 
 ```bash
-dotnet add package Baileys
+dotnet add package Baileys.NET
 ```
 
 Or add it directly to your `.csproj`:
 
 ```xml
-<PackageReference Include="Baileys" Version="7.0.0" />
+<PackageReference Include="Baileys.NET" Version="1.2.0" />
 ```
 
 ---
@@ -44,7 +44,47 @@ Console.WriteLine($"ADV secret      : {creds.AdvSecretKey}");
 
 ---
 
-## 3. Decode & Encode JIDs
+## 3. Print the QR Code for Pairing
+
+When a new session is established, WhatsApp sends a QR code string via the `ConnectionUpdateEvent.Qr` property. Print it to the terminal so the user can scan it with the WhatsApp mobile app:
+
+```csharp
+using Baileys.Types;
+using Baileys.Utils;
+
+// Subscribe to connection updates (exact wiring depends on your socket layer):
+void OnConnectionUpdate(ConnectionUpdateEvent update)
+{
+    if (update.Qr is string qr)
+    {
+        // Logs an info message and renders the QR code as ASCII art.
+        QrUtils.LogQr(qr, logger);
+    }
+
+    if (update.Connection == WaConnectionState.Open)
+        Console.WriteLine("✅ Connected to WhatsApp!");
+}
+```
+
+`QrUtils.LogQr` writes a human-readable prompt via the `ILogger` you provide, then writes the QR art directly to `Console.Out` using Unicode block characters (████) so it can be scanned by the WhatsApp mobile app.
+
+> **Note:** WhatsApp QR codes expire after ~20 seconds. When a new `Qr` value arrives, call `QrUtils.LogQr` again to display the refreshed code.
+
+You can also use the lower-level helpers independently:
+
+```csharp
+// Just print to stdout (no logger call):
+QrUtils.PrintToConsole(qr);
+
+// Or generate the matrix and render it yourself:
+bool[,] matrix = QrUtils.Generate(qr);
+string ascii   = QrUtils.RenderToAscii(matrix);
+Console.Write(ascii);
+```
+
+---
+
+## 4. Decode & Encode JIDs
 
 WhatsApp uses JIDs (Jabber IDs) to address users, groups, and channels:
 
@@ -75,7 +115,7 @@ See the full reference: [JID Utilities](api/jid-utils.md)
 
 ---
 
-## 4. Cryptographic Primitives
+## 5. Cryptographic Primitives
 
 The `Crypto` class wraps `System.Security.Cryptography` — no external dependencies:
 
@@ -107,7 +147,7 @@ See the full reference: [Cryptography](api/crypto.md)
 
 ---
 
-## 5. WABinary — Encode and Decode Nodes
+## 6. WABinary — Encode and Decode Nodes
 
 The WhatsApp wire protocol uses a compact binary node format. Use `WaBinaryEncoder` and `WaBinaryDecoder` to serialise/deserialise:
 
@@ -141,7 +181,7 @@ See the full reference: [WABinary Codec](api/wabinary.md)
 
 ---
 
-## 6. Using Dependency Injection
+## 7. Using Dependency Injection
 
 For ASP.NET Core or Worker Service applications, register the package with the built-in DI container:
 

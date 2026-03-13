@@ -9,7 +9,7 @@
     <!-- ── NuGet Package Metadata ─────────────────────────── -->
     <PackageId>Baileys.NET</PackageId>
     <Version>1.2.0</Version>
-    <Authors>WhiskeySockets;Rajeh Taher</Authors>
+    <Authors>WhiskeySockets;Kazeem Quadri</Authors>
     <Description>
       A .NET 10 port of the Baileys WhatsApp Web library.
       Provides the WABinary codec, crypto utilities, JID helpers, Noise protocol

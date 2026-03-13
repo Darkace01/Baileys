@@ -46,7 +46,7 @@ Baileys.NET
 | Property | Value |
 |---|---|
 | **Package ID** | `Baileys.NET` |
-| **Current Version** | 1.2.0 |
+| **Current Version** | 1.3.0 |
 | **Target Framework** | `net10.0` |
 | **License** | MIT |
 | **Runtime Dependencies** | `Microsoft.Extensions.DependencyInjection.Abstractions` 10.0.4, `Microsoft.Extensions.Options` 10.0.4 |
@@ -59,7 +59,7 @@ dotnet add package Baileys.NET
 
 ```xml
 <!-- .csproj -->
-<PackageReference Include="Baileys.NET" Version="1.2.0" />
+<PackageReference Include="Baileys.NET" Version="1.3.0" />
 ```
 
 ## Namespace Map

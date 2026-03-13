@@ -14,13 +14,13 @@ This guide walks you from installing the package to establishing a valid set of 
 ## 1. Install the Package
 
 ```bash
-dotnet add package Baileys
+dotnet add package Baileys.NET
 ```
 
 Or add it directly to your `.csproj`:
 
 ```xml
-<PackageReference Include="Baileys" Version="7.0.0" />
+<PackageReference Include="Baileys.NET" Version="1.2.0" />
 ```
 
 ---

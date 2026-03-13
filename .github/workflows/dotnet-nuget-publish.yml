@@ -120,7 +120,14 @@ jobs:
           echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Packaging version: ${VERSION}"
 
-      - name: Build & Pack (Release)
+      - name: Build (Release)
+        run: >
+          dotnet build ${{ env.PROJECT_PATH }}
+          --configuration Release
+          --no-restore
+          -p:Version=${{ steps.version.outputs.VERSION }}
+
+      - name: Pack (Release)
         run: >
           dotnet pack ${{ env.PROJECT_PATH }}
           --configuration Release

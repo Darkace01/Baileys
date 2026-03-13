@@ -183,7 +183,18 @@ public class QrUtilsTests
     public void LogQr_InvokesLoggerInfoWithQrMessage()
     {
         var logger = new CapturingLogger();
-        QrUtils.LogQr("TEST", logger);
+
+        // Suppress the QR art written to Console.Out so CI output stays clean.
+        var originalOut = Console.Out;
+        Console.SetOut(new StringWriter());
+        try
+        {
+            QrUtils.LogQr("TEST", logger);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
 
         Assert.Contains(logger.Messages, msg =>
             msg.Contains("QR", StringComparison.OrdinalIgnoreCase) ||

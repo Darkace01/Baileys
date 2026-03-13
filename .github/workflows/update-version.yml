@@ -78,13 +78,15 @@ jobs:
 
           gh pr create \
             --title "chore: bump Baileys.NET version to ${VERSION}" \
-            --body "Automated version bump for the \`Baileys.NET\` NuGet package.
-
-          **New version:** \`${VERSION}\`
-
-          **File updated:**
-          - \`dotnet/src/Baileys/Baileys.csproj\`
-
-          After merging, push the tag \`v${VERSION}-dotnet\` to trigger the NuGet publish workflow." \
+            --body-file - \
             --base master \
-            --head "$BRANCH_NAME" || echo "PR already exists or could not be created"
+            --head "$BRANCH_NAME" << PREOF || echo "PR already exists or could not be created"
+Automated version bump for the \`Baileys.NET\` NuGet package.
+
+**New version:** \`${VERSION}\`
+
+**File updated:**
+- \`dotnet/src/Baileys/Baileys.csproj\`
+
+After merging, push the tag \`v${VERSION}-dotnet\` to trigger the NuGet publish workflow.
+PREOF

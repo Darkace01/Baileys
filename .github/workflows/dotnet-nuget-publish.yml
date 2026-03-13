@@ -125,6 +125,7 @@ jobs:
           dotnet pack ${{ env.PROJECT_PATH }}
           --configuration Release
           --no-restore
+          --no-build
           -p:Version=${{ steps.version.outputs.VERSION }}
           --output ./nupkg
 

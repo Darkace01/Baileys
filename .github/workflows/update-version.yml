@@ -81,12 +81,12 @@ jobs:
             --body-file - \
             --base master \
             --head "$BRANCH_NAME" << PREOF || echo "PR already exists or could not be created"
-Automated version bump for the \`Baileys.NET\` NuGet package.
+          Automated version bump for the \`Baileys.NET\` NuGet package.
 
-**New version:** \`${VERSION}\`
+          **New version:** \`${VERSION}\`
 
-**File updated:**
-- \`dotnet/src/Baileys/Baileys.csproj\`
+          **File updated:**
+          - \`dotnet/src/Baileys/Baileys.csproj\`
 
-After merging, push the tag \`v${VERSION}-dotnet\` to trigger the NuGet publish workflow.
-PREOF
+          After merging, push the tag \`v${VERSION}-dotnet\` to trigger the NuGet publish workflow.
+          PREOF

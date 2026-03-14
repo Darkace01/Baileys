@@ -20,7 +20,7 @@ dotnet add package Baileys.NET
 Or add it directly to your `.csproj`:
 
 ```xml
-<PackageReference Include="Baileys.NET" Version="1.4.0" />
+<PackageReference Include="Baileys.NET" Version="1.5.0" />
 ```
 
 ---

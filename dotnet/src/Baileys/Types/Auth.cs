@@ -62,6 +62,20 @@ public sealed class AccountSettings
     public long? DefaultEphemeralSettingTimestamp { get; set; }
 }
 
+/// <summary>
+/// Full authentication state combining credentials and the Signal-protocol
+/// key store, mirroring the TypeScript <c>AuthenticationState</c> type from
+/// <c>Types/Auth.ts</c>.
+/// </summary>
+public sealed class AuthenticationState
+{
+    /// <summary>The WhatsApp authentication credentials.</summary>
+    public required AuthenticationCreds Creds { get; init; }
+
+    /// <summary>The Signal-protocol key store for this session.</summary>
+    public required ISignalKeyStore Keys { get; init; }
+}
+
 /// <summary>Full authentication credentials including Signal creds and session metadata.</summary>
 public sealed class AuthenticationCreds
 {

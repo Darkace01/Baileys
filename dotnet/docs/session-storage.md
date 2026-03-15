@@ -1,6 +1,6 @@
 # Session Storage
 
-Baileys separates the **authentication credentials** (`AuthenticationCreds`) from where they are stored, via the `IAuthStateProvider` interface. This lets you choose — or swap — your backing store at any time without changing any other code.
+Baileys separates the **authentication credentials** (`AuthenticationCreds`) and the **Signal-protocol key store** (`ISignalKeyStore`) from where they are stored. The `IAuthStateProvider` interface controls credential persistence; `ISignalKeyStore` controls Signal key persistence. Together they form an `AuthenticationState` — the .NET equivalent of the TypeScript `useMultiFileAuthState()` return value.
 
 ---
 
@@ -104,6 +104,181 @@ All `byte[]` fields are stored as **Base64** strings. The file is overwritten on
 | Persists across restarts | Not suitable for multi-instance (no distributed locking) |
 | Human-readable JSON | Requires a writable file system path |
 | Easy backup/restore | Credentials in plain text — secure the file |
+
+---
+
+### 3. `DirectoryAuthStateProvider`
+
+The **recommended production provider** — mirrors the TypeScript `useMultiFileAuthState(folder)` integration pattern.
+
+Stores everything in a single directory:
+- **`creds.json`** — authentication credentials (same format as `FileAuthStateProvider`)
+- **One file per Signal key** — named `{type}-{sanitized-id}` (e.g. `pre-key-1`, `session-jid@s.whatsapp.net-0`)
+
+**Best for:** Any deployment that needs a full session including Signal-protocol keys — the closest match to the TypeScript Baileys integration.
+
+```csharp
+// Registration (via DI) — equivalent to JS useMultiFileAuthState("baileys_auth_info")
+builder.Services.AddBaileysWithDirectoryStorage(
+    directory: "baileys_auth_info",
+    configure: o => o.PhoneNumber = "15551234567");
+
+// Direct construction (without DI)
+var provider = new DirectoryAuthStateProvider("baileys_auth_info");
+
+// Load the full AuthenticationState (creds + Signal keys in one call)
+AuthenticationState state = await provider.LoadAuthStateAsync();
+// state.Creds — AuthenticationCreds (pass to handshake)
+// state.Keys  — DirectorySignalKeyStore (pass as signal key store)
+
+// Save updated credentials
+await provider.SaveCredsAsync(state.Creds);
+
+// Clear everything (forces full re-pair on next start)
+await provider.ClearAsync();
+```
+
+The `Keys` property (a `DirectorySignalKeyStore`) persists automatically — no manual save call is needed for Signal keys.
+
+| Advantage | Limitation |
+|---|---|
+| Full session state (creds + Signal keys) | Requires a writable directory |
+| Survives process restarts | Not suitable for multi-instance without distributed locking |
+| Matches TypeScript `useMultiFileAuthState` | Keys stored as plain files — secure the directory |
+| Easy to backup (copy the directory) | |
+
+---
+
+## The `ISignalKeyStore` Interface
+
+`ISignalKeyStore` is the Signal-protocol equivalent of `IAuthStateProvider` — it stores and retrieves all Signal cryptographic material (pre-keys, sessions, sender-keys, app-state sync keys, etc.).
+
+```csharp
+namespace Baileys.Types;
+
+public interface ISignalKeyStore
+{
+    // Retrieve raw JSON bytes for the given type + IDs
+    Task<IReadOnlyDictionary<string, byte[]?>> GetAsync(
+        string type, IReadOnlyList<string> ids,
+        CancellationToken cancellationToken = default);
+
+    // Store or remove values (null value = remove)
+    Task SetAsync(
+        string type, IReadOnlyDictionary<string, byte[]?> values,
+        CancellationToken cancellationToken = default);
+
+    // Remove all stored keys of every type
+    Task ClearAsync(CancellationToken cancellationToken = default);
+}
+```
+
+### Signal Data Types (`SignalDataTypes`)
+
+Use the constants from `SignalDataTypes` as the `type` argument:
+
+| Constant | Value | Contents |
+|---|---|---|
+| `SignalDataTypes.PreKey` | `"pre-key"` | X3DH pre-key pairs |
+| `SignalDataTypes.Session` | `"session"` | Double-ratchet session state per JID |
+| `SignalDataTypes.SenderKey` | `"sender-key"` | Group sender-key material |
+| `SignalDataTypes.SenderKeyMemory` | `"sender-key-memory"` | Distribution tracker per group |
+| `SignalDataTypes.AppStateSyncKey` | `"app-state-sync-key"` | App-state encryption keys |
+| `SignalDataTypes.AppStateSyncVersion` | `"app-state-sync-version"` | LT-hash state for sync patches |
+| `SignalDataTypes.LidMapping` | `"lid-mapping"` | LID ↔ phone-number pairs |
+| `SignalDataTypes.DeviceList` | `"device-list"` | Known device IDs per JID |
+| `SignalDataTypes.TcToken` | `"tctoken"` | TC-token data |
+| `SignalDataTypes.IdentityKey` | `"identity-key"` | Raw identity-key bytes |
+
+### Typed Extension Methods (`SignalKeyStoreExtensions`)
+
+`SignalKeyStoreExtensions` adds typed `Get*/Set*Async` helpers so you don't have to work with raw bytes:
+
+```csharp
+using Baileys.Types;
+
+var store = new InMemorySignalKeyStore();
+
+// Pre-keys
+var kp = new KeyPair([1, 2, 3], [4, 5, 6]);
+await store.SetPreKeysAsync(new Dictionary<string, KeyPair?> { ["1"] = kp });
+var preKeys = await store.GetPreKeysAsync(["1"]);
+
+// Sessions (raw bytes)
+await store.SetSessionsAsync(new Dictionary<string, byte[]?> { ["jid@s.whatsapp.net:0"] = sessionBytes });
+var sessions = await store.GetSessionsAsync(["jid@s.whatsapp.net:0"]);
+
+// App-state sync version (LT-hash state)
+var state = new LtHashState { Version = 7, Hash = [0xDE, 0xAD] };
+await store.SetAppStateSyncVersionsAsync(new Dictionary<string, LtHashState?> { ["critical_block"] = state });
+
+// Sender-key distribution memory
+var mem = new Dictionary<string, bool> { ["jid@s.whatsapp.net"] = true };
+await store.SetSenderKeyMemoriesAsync(new Dictionary<string, Dictionary<string, bool>?> { ["group@g.us"] = mem });
+
+// LID mappings
+await store.SetLidMappingsAsync(new Dictionary<string, string?> { ["lid123"] = "15551234567" });
+```
+
+### Built-in `ISignalKeyStore` Implementations
+
+#### `InMemorySignalKeyStore`
+
+Thread-safe, `ConcurrentDictionary`-backed store. State is lost on process exit.
+
+```csharp
+var store = new InMemorySignalKeyStore();
+```
+
+**Best for:** Testing, ephemeral sessions, or as an inner store wrapped by a caching layer.
+
+#### `DirectorySignalKeyStore`
+
+Persists each key as a separate file — one file per `(type, id)` pair — using the same naming convention as the TypeScript `useMultiFileAuthState` helper.
+
+```csharp
+var store = new DirectorySignalKeyStore("baileys_auth_info");
+// File names: pre-key-1, session-jid@s.whatsapp.net-0, sender-key-group__g.us, …
+```
+
+**Best for:** Production deployments as the backing store for `DirectoryAuthStateProvider`.
+
+> **Note:** `DirectoryAuthStateProvider.Keys` is a `DirectorySignalKeyStore` — you rarely need to construct one directly.
+
+---
+
+## `AuthenticationState` — The Complete Session Bundle
+
+`AuthenticationState` bundles `AuthenticationCreds` and `ISignalKeyStore` into a single object, mirroring the TypeScript `AuthenticationState` type:
+
+```csharp
+public sealed class AuthenticationState
+{
+    public required AuthenticationCreds Creds { get; init; }
+    public required ISignalKeyStore     Keys  { get; init; }
+}
+```
+
+### Building an `AuthenticationState`
+
+Use the `LoadAuthStateAsync()` extension method on any `IAuthStateProvider`:
+
+```csharp
+using Baileys.Extensions;
+
+// DirectoryAuthStateProvider — uses its built-in DirectorySignalKeyStore automatically:
+var dirProvider = new DirectoryAuthStateProvider("baileys_auth_info");
+AuthenticationState state = await dirProvider.LoadAuthStateAsync();
+
+// Any other provider — an InMemorySignalKeyStore is created automatically:
+var inMemProvider = new InMemoryAuthStateProvider();
+AuthenticationState state2 = await inMemProvider.LoadAuthStateAsync();
+
+// Any other provider — supply your own key store:
+var fileProvider = new FileAuthStateProvider("creds.json");
+var keys         = new DirectorySignalKeyStore("baileys_keys");
+AuthenticationState state3 = await fileProvider.LoadAuthStateAsync(keys: keys);
+```
 
 ---
 
@@ -270,8 +445,6 @@ SaveCredsAsync(creds)     ← called whenever creds are updated
        ▼
 ClearAsync()              ← removes all state
 ```
-
----
 
 ## Security Considerations
 

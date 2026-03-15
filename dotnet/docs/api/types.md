@@ -12,7 +12,19 @@ using Baileys.Types;
 
 ---
 
-## Authentication & Credentials (`Auth.cs`)
+## Authentication & Credentials (`Auth.cs`, `SignalKeyStore.cs`)
+
+### `AuthenticationState`
+
+Bundles credentials and the Signal key store into one object — the .NET equivalent of the TypeScript `AuthenticationState` type. Returned by `IAuthStateProvider.LoadAuthStateAsync()`.
+
+```csharp
+public sealed class AuthenticationState
+{
+    public required AuthenticationCreds Creds { get; init; }
+    public required ISignalKeyStore     Keys  { get; init; }
+}
+```
 
 ### `AuthenticationCreds`
 
@@ -428,3 +440,84 @@ public sealed record SignalIdentity(ProtocolAddress Identifier, byte[] Identifie
 ```csharp
 public sealed record LidMapping(string PhoneNumber, string Lid);
 ```
+
+---
+
+## Signal Key Store (`SignalKeyStore.cs`, `SignalKeyStoreExtensions.cs`)
+
+### `ISignalKeyStore`
+
+Generic key-value store for all Signal-protocol cryptographic material.
+
+```csharp
+public interface ISignalKeyStore
+{
+    Task<IReadOnlyDictionary<string, byte[]?>> GetAsync(
+        string type, IReadOnlyList<string> ids,
+        CancellationToken cancellationToken = default);
+
+    Task SetAsync(
+        string type, IReadOnlyDictionary<string, byte[]?> values,
+        CancellationToken cancellationToken = default);
+
+    Task ClearAsync(CancellationToken cancellationToken = default);
+}
+```
+
+### `ISignalKeyStoreWithTransaction`
+
+Extends `ISignalKeyStore` with atomic transaction support.
+
+```csharp
+public interface ISignalKeyStoreWithTransaction : ISignalKeyStore
+{
+    bool IsInTransaction { get; }
+    Task<T> TransactionAsync<T>(Func<Task<T>> action, string key = "");
+}
+```
+
+### `SignalDataTypes`
+
+Constants for Signal data type names, mirroring the TypeScript `SignalDataTypeMap` keys.
+
+| Constant | Value |
+|---|---|
+| `SignalDataTypes.PreKey` | `"pre-key"` |
+| `SignalDataTypes.Session` | `"session"` |
+| `SignalDataTypes.SenderKey` | `"sender-key"` |
+| `SignalDataTypes.SenderKeyMemory` | `"sender-key-memory"` |
+| `SignalDataTypes.AppStateSyncKey` | `"app-state-sync-key"` |
+| `SignalDataTypes.AppStateSyncVersion` | `"app-state-sync-version"` |
+| `SignalDataTypes.LidMapping` | `"lid-mapping"` |
+| `SignalDataTypes.DeviceList` | `"device-list"` |
+| `SignalDataTypes.TcToken` | `"tctoken"` |
+| `SignalDataTypes.IdentityKey` | `"identity-key"` |
+
+### `TcToken`
+
+TC-token data used in device authentication.
+
+```csharp
+public sealed class TcToken
+{
+    public required byte[] Token     { get; init; }
+    public          string? Timestamp { get; init; }
+}
+```
+
+### `SignalKeyStoreExtensions`
+
+Typed extension methods on `ISignalKeyStore`. Available helpers:
+
+| Method | Type parameter |
+|---|---|
+| `GetPreKeysAsync` / `SetPreKeysAsync` | `KeyPair?` |
+| `GetSessionsAsync` / `SetSessionsAsync` | `byte[]?` |
+| `GetSenderKeysAsync` / `SetSenderKeysAsync` | `byte[]?` |
+| `GetSenderKeyMemoriesAsync` / `SetSenderKeyMemoriesAsync` | `Dictionary<string, bool>?` |
+| `GetAppStateSyncKeysAsync` / `SetAppStateSyncKeysAsync` | `byte[]?` |
+| `GetAppStateSyncVersionsAsync` / `SetAppStateSyncVersionsAsync` | `LtHashState?` |
+| `GetLidMappingsAsync` / `SetLidMappingsAsync` | `string?` |
+| `GetDeviceListsAsync` / `SetDeviceListsAsync` | `IReadOnlyList<string>?` |
+| `GetTcTokensAsync` / `SetTcTokensAsync` | `TcToken?` |
+| `GetIdentityKeysAsync` / `SetIdentityKeysAsync` | `byte[]?` |

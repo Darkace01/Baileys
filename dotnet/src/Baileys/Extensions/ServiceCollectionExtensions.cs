@@ -85,6 +85,40 @@ public static class ServiceCollectionExtensions
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    //  AddBaileysWithDirectoryStorage — directory-based provider
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Registers Baileys with a <see cref="DirectoryAuthStateProvider"/> that
+    /// persists both credentials and Signal-protocol keys under
+    /// <paramref name="directory"/> — the direct .NET equivalent of the
+    /// TypeScript <c>useMultiFileAuthState(folder)</c> helper.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="directory">
+    /// Path to the directory where session state is stored (e.g.
+    /// <c>"baileys_auth_info"</c> or an absolute path).  The directory is
+    /// created automatically if it does not exist.
+    /// </param>
+    /// <param name="configure">Optional delegate to configure <see cref="BaileysOptions"/>.</param>
+    /// <example>
+    /// <code>
+    /// builder.Services.AddBaileysWithDirectoryStorage(
+    ///     directory: "baileys_auth_info",
+    ///     configure: o => { o.PhoneNumber = "15551234567"; });
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddBaileysWithDirectoryStorage(
+        this IServiceCollection services,
+        string directory,
+        Action<BaileysOptions>? configure = null)
+    {
+        AddOptions(services, configure);
+        services.AddSingleton<IAuthStateProvider>(_ => new DirectoryAuthStateProvider(directory));
+        return services;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     //  AddBaileysWithProvider<T> — custom provider
     // ─────────────────────────────────────────────────────────────────────────
 

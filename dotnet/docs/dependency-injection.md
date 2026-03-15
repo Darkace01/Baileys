@@ -85,6 +85,50 @@ builder.Services.AddBaileysWithFileStorage(
 
 ---
 
+### `AddBaileysWithDirectoryStorage()` — Directory-Based Full Session
+
+The **recommended production method** — a direct .NET equivalent of the TypeScript `useMultiFileAuthState(folder)` helper.
+
+Registers a `DirectoryAuthStateProvider` that stores credentials in `creds.json` and Signal protocol keys as individual files under the same directory.
+
+```csharp
+// Relative path (resolves to current working directory)
+builder.Services.AddBaileysWithDirectoryStorage("baileys_auth_info", o =>
+{
+    o.PhoneNumber = "15551234567";
+});
+
+// Absolute path (recommended for production)
+builder.Services.AddBaileysWithDirectoryStorage(
+    directory: "/var/data/whatsapp/session",
+    configure: o => o.PhoneNumber = "15551234567");
+```
+
+Resolve the full `AuthenticationState` (credentials + Signal keys) from the injected provider:
+
+```csharp
+using Baileys.Extensions;
+using Baileys.Session;
+using Baileys.Types;
+
+public class MyWhatsAppService(IAuthStateProvider session) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        // Load the complete session in one call
+        AuthenticationState state = await session.LoadAuthStateAsync(cancellationToken: ct);
+
+        // state.Creds — pass to the WhatsApp handshake
+        // state.Keys  — DirectorySignalKeyStore containing all Signal keys
+        Console.WriteLine($"Registered: {state.Creds.Registered}");
+    }
+}
+```
+
+See [Session Storage → DirectoryAuthStateProvider](session-storage.md#3-directoryauthstateprovider) for full details.
+
+---
+
 ### `AddBaileysWithProvider<T>()` — Custom Provider
 
 Register your own `IAuthStateProvider` implementation (database, Redis, Azure Blob Storage, etc.):

@@ -8,12 +8,15 @@
 
     <!-- ── NuGet Package Metadata ─────────────────────────── -->
     <PackageId>Baileys.NET</PackageId>
-    <Version>1.5.0</Version>
+    <Version>1.6.0</Version>
     <Authors>WhiskeySockets;Kazeem Quadri</Authors>
     <Description>
       A .NET 10 port of the Baileys WhatsApp Web library.
-      Provides the WABinary codec, crypto utilities, JID helpers, Noise protocol
-      handler, auth credential initialisation, and complete WhatsApp type definitions.
+      Provides the WABinary codec, crypto utilities, JID helpers, Noise protocol handler,
+      auth credential initialisation, complete WhatsApp type definitions, Signal-protocol
+      key storage (ISignalKeyStore / InMemorySignalKeyStore / DirectorySignalKeyStore),
+      a full AuthenticationState bundle, and a DirectoryAuthStateProvider that mirrors
+      the TypeScript useMultiFileAuthState() integration pattern.
       Zero external dependencies — all crypto uses System.Security.Cryptography.
     </Description>
     <PackageTags>whatsapp;whatsapp-web;automation;websockets;baileys;noise-protocol;signal-protocol</PackageTags>

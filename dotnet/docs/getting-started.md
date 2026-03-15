@@ -20,7 +20,7 @@ dotnet add package Baileys.NET
 Or add it directly to your `.csproj`:
 
 ```xml
-<PackageReference Include="Baileys.NET" Version="1.5.0" />
+<PackageReference Include="Baileys.NET" Version="1.6.0" />
 ```
 
 ---
@@ -191,9 +191,14 @@ For ASP.NET Core or Worker Service applications, register the package with the b
 // In-memory session (no persistence)
 builder.Services.AddBaileys(o => o.PhoneNumber = "15551234567");
 
-// File-based session persistence
+// File-based credentials only
 builder.Services.AddBaileysWithFileStorage(
     filePath: "baileys_auth.json",
+    configure: o => o.PhoneNumber = "15551234567");
+
+// Directory-based — credentials + Signal keys (mirrors TypeScript useMultiFileAuthState)
+builder.Services.AddBaileysWithDirectoryStorage(
+    directory: "baileys_auth_info",
     configure: o => o.PhoneNumber = "15551234567");
 ```
 
@@ -202,6 +207,7 @@ Then inject `IAuthStateProvider` and `IOptions<BaileysOptions>` wherever needed:
 ```csharp
 using Baileys.Session;
 using Baileys.Options;
+using Baileys.Extensions;
 using Microsoft.Extensions.Options;
 
 public class MyWhatsAppService(
@@ -218,6 +224,34 @@ public class MyWhatsAppService(
 ```
 
 See the full guide: [Dependency Injection](dependency-injection.md)
+
+---
+
+## 8. Loading a Full `AuthenticationState`
+
+When you need both credentials and Signal-protocol keys (the most common production scenario), use `LoadAuthStateAsync()` to get an `AuthenticationState` in one call — the direct .NET equivalent of the TypeScript `useMultiFileAuthState()` pattern:
+
+```csharp
+using Baileys.Extensions;
+using Baileys.Session;
+using Baileys.Types;
+
+// With DirectoryAuthStateProvider (recommended — creds + keys in one directory):
+var provider = new DirectoryAuthStateProvider("baileys_auth_info");
+AuthenticationState state = await provider.LoadAuthStateAsync();
+// state.Creds — pass to the WhatsApp handshake / Noise protocol
+// state.Keys  — DirectorySignalKeyStore with all Signal keys
+
+// With any other IAuthStateProvider (keys default to InMemorySignalKeyStore):
+var inMem = new InMemoryAuthStateProvider();
+AuthenticationState state2 = await inMem.LoadAuthStateAsync();
+
+// Or supply your own key store:
+var keys = new DirectorySignalKeyStore("baileys_keys");
+AuthenticationState state3 = await inMem.LoadAuthStateAsync(keys: keys);
+```
+
+See the full reference: [Session Storage](session-storage.md)
 
 ---
 

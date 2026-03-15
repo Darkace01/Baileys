@@ -46,7 +46,7 @@ Baileys.NET
 | Property | Value |
 |---|---|
 | **Package ID** | `Baileys.NET` |
-| **Current Version** | 1.5.0 |
+| **Current Version** | 1.6.0 |
 | **Target Framework** | `net10.0` |
 | **License** | MIT |
 | **Runtime Dependencies** | `Microsoft.Extensions.DependencyInjection.Abstractions` 10.0.4, `Microsoft.Extensions.Options` 10.0.4 |
@@ -59,17 +59,17 @@ dotnet add package Baileys.NET
 
 ```xml
 <!-- .csproj -->
-<PackageReference Include="Baileys.NET" Version="1.5.0" />
+<PackageReference Include="Baileys.NET" Version="1.6.0" />
 ```
 
 ## Namespace Map
 
 | Namespace | Contents |
 |---|---|
-| `Baileys.Types` | All domain types: `AuthenticationCreds`, `Chat`, `Contact`, `GroupMetadata`, `BinaryNode`, … |
+| `Baileys.Types` | All domain types: `AuthenticationCreds`, `AuthenticationState`, `ISignalKeyStore`, `SignalDataTypes`, `SignalKeyStoreExtensions`, `Chat`, `Contact`, `GroupMetadata`, `BinaryNode`, … |
 | `Baileys.Utils` | `Crypto`, `JidUtils`, `AuthUtils`, `Generics`, `NoiseHandler`, `ILogger` |
 | `Baileys.WABinary` | `WaBinaryEncoder`, `WaBinaryDecoder`, `WaBinaryConstants` |
 | `Baileys.Defaults` | `BaileysDefaults`, `Browsers` |
 | `Baileys.Options` | `BaileysOptions` |
-| `Baileys.Session` | `IAuthStateProvider`, `InMemoryAuthStateProvider`, `FileAuthStateProvider` |
-| `Baileys.Extensions` | `ServiceCollectionExtensions` |
+| `Baileys.Session` | `IAuthStateProvider`, `InMemoryAuthStateProvider`, `FileAuthStateProvider`, `DirectoryAuthStateProvider`, `InMemorySignalKeyStore`, `DirectorySignalKeyStore` |
+| `Baileys.Extensions` | `ServiceCollectionExtensions`, `AuthStateExtensions` |

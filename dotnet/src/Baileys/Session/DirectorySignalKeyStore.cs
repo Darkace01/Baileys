@@ -12,9 +12,15 @@ namespace Baileys.Session;
 /// <para>
 /// Files are named <c>{type}-{sanitized-id}</c> where <c>/</c> is replaced
 /// by <c>__</c> and <c>:</c> by <c>-</c>, exactly as in the TypeScript helper.
+/// All remaining OS-specific invalid filename characters are replaced with
+/// <c>_</c>. The resolved path is always verified to stay within the store
+/// directory to prevent path traversal.
 /// </para>
 /// <para>
-/// Thread-safe: a <see cref="SemaphoreSlim"/> serialises all file I/O.
+/// Thread-safe per instance: a <see cref="SemaphoreSlim"/> serialises all
+/// file I/O for a given <see cref="DirectorySignalKeyStore"/> instance.
+/// Multiple instances (or processes) pointing at the same directory are not
+/// co-ordinated by this lock.
 /// </para>
 /// </remarks>
 public sealed class DirectorySignalKeyStore : ISignalKeyStore
@@ -103,7 +109,10 @@ public sealed class DirectorySignalKeyStore : ISignalKeyStore
             if (System.IO.Directory.Exists(Directory))
             {
                 foreach (var file in System.IO.Directory.GetFiles(Directory))
-                    File.Delete(file);
+                {
+                    if (IsKeyFile(Path.GetFileName(file)))
+                        File.Delete(file);
+                }
             }
         }
         finally
@@ -116,15 +125,75 @@ public sealed class DirectorySignalKeyStore : ISignalKeyStore
     //  Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
+    // All known Signal data type prefixes — used to identify key files.
+    private static readonly string[] KnownTypePrefixes = [
+        SignalDataTypes.PreKey            + "-",
+        SignalDataTypes.Session           + "-",
+        SignalDataTypes.SenderKey         + "-",
+        SignalDataTypes.SenderKeyMemory   + "-",
+        SignalDataTypes.AppStateSyncKey   + "-",
+        SignalDataTypes.AppStateSyncVersion + "-",
+        SignalDataTypes.LidMapping        + "-",
+        SignalDataTypes.DeviceList        + "-",
+        SignalDataTypes.TcToken           + "-",
+        SignalDataTypes.IdentityKey       + "-",
+    ];
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="fileName"/> is a
+    /// Signal key file created by this store (i.e., its name starts with a
+    /// known <see cref="SignalDataTypes"/> prefix followed by a dash).
+    /// </summary>
+    private static bool IsKeyFile(string fileName)
+    {
+        foreach (var prefix in KnownTypePrefixes)
+        {
+            if (fileName.StartsWith(prefix, StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>
     /// Returns the file path for a given signal data type + id, applying the
     /// same filename sanitisation as the TypeScript helper:
-    /// <c>/</c> → <c>__</c>, <c>:</c> → <c>-</c>.
+    /// <c>/</c> → <c>__</c>, <c>:</c> → <c>-</c>, all remaining
+    /// OS-specific invalid filename characters → <c>_</c>.
+    /// The resolved path is always verified to be inside
+    /// <see cref="Directory"/>.
     /// </summary>
     public string GetFilePath(string type, string id)
     {
+        // TypeScript-compatible replacements
         var sanitizedId = id.Replace("/", "__", StringComparison.Ordinal)
                             .Replace(":", "-", StringComparison.Ordinal);
-        return Path.Combine(Directory, $"{type}-{sanitizedId}");
+
+        // Replace any remaining invalid filename characters (including '\' on
+        // Windows) and explicit directory separators.
+        var chars = sanitizedId.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (Array.IndexOf(InvalidChars, chars[i]) >= 0
+                || chars[i] == Path.DirectorySeparatorChar
+                || chars[i] == Path.AltDirectorySeparatorChar)
+            {
+                chars[i] = '_';
+            }
+        }
+        sanitizedId = new string(chars);
+
+        var candidate = Path.GetFullPath(Path.Combine(Directory, $"{type}-{sanitizedId}"));
+        var dirRoot   = Path.GetFullPath(Directory);
+
+        // Guard against any residual path traversal: the candidate must be a
+        // direct child of dirRoot, not equal to it and not outside it.
+        var relative = Path.GetRelativePath(dirRoot, candidate);
+        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+        {
+            throw new InvalidOperationException(
+                "Key id resolves to a path outside the store directory.");
+        }
+
+        return candidate;
     }
 }

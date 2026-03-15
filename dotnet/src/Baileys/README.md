@@ -123,7 +123,7 @@ var preKeys = await store.GetPreKeysAsync(["1"]);
 | `Baileys.WABinary` | `WaBinaryEncoder`, `WaBinaryDecoder`, `WaBinaryConstants` |
 | `Baileys.Defaults` | `BaileysDefaults`, `Browsers` |
 | `Baileys.Options` | `BaileysOptions` |
-| `Baileys.Session` | `IAuthStateProvider`, `InMemoryAuthStateProvider`, `FileAuthStateProvider`, `DirectoryAuthStateProvider`, `ISignalKeyStore`, `InMemorySignalKeyStore`, `DirectorySignalKeyStore` |
+| `Baileys.Session` | `IAuthStateProvider`, `InMemoryAuthStateProvider`, `FileAuthStateProvider`, `DirectoryAuthStateProvider`, `InMemorySignalKeyStore`, `DirectorySignalKeyStore` |
 | `Baileys.Extensions` | `ServiceCollectionExtensions`, `AuthStateExtensions` |
 
 ## Requirements

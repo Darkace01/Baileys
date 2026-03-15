@@ -164,9 +164,26 @@ public sealed class DirectoryAuthStateProvider : IAuthStateProvider
 
     private async Task SaveCredsInternalAsync(AuthenticationCreds creds, CancellationToken ct)
     {
-        var dto = AuthCredsDto.FromAuthenticationCreds(creds);
-        await using var stream = File.Open(CredsFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
-        await JsonSerializer.SerializeAsync(stream, dto, JsonOptions, ct).ConfigureAwait(false);
+        var dto      = AuthCredsDto.FromAuthenticationCreds(creds);
+        var tempPath = Path.Combine(Directory, $"creds.json.{Path.GetRandomFileName()}.tmp");
+        try
+        {
+            await using (var stream = File.Open(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                await JsonSerializer.SerializeAsync(stream, dto, JsonOptions, ct).ConfigureAwait(false);
+            }
+            // Atomic-replace: on POSIX systems File.Move maps to rename(2) which
+            // is atomic. On Windows it is best-effort (not a single kernel op),
+            // but still far safer than overwriting creds.json directly.
+            // Concurrent writes from multiple instances are not co-ordinated.
+            File.Move(tempPath, CredsFilePath, overwrite: true);
+        }
+        catch
+        {
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
+            throw;
+        }
     }
 
     // ────────────────────────────────────────────────────────────────────────

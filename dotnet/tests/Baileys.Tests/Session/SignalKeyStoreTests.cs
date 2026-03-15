@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Baileys.Extensions;
 using Baileys.Options;
 using Baileys.Session;

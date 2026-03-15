@@ -1,5 +1,6 @@
 using Baileys.Options;
 using Baileys.Session;
+using Baileys.Utils;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Baileys.Extensions;
@@ -55,6 +56,7 @@ public static class ServiceCollectionExtensions
         Action<BaileysOptions>? configure = null)
     {
         AddOptions(services, configure);
+        services.AddSingleton<IBaileysEventEmitter, BaileysEventEmitter>();
         services.AddSingleton<IAuthStateProvider, InMemoryAuthStateProvider>();
         return services;
     }
@@ -80,6 +82,7 @@ public static class ServiceCollectionExtensions
         Action<BaileysOptions>? configure = null)
     {
         AddOptions(services, configure);
+        services.AddSingleton<IBaileysEventEmitter, BaileysEventEmitter>();
         services.AddSingleton<IAuthStateProvider>(_ => new FileAuthStateProvider(filePath));
         return services;
     }
@@ -104,6 +107,7 @@ public static class ServiceCollectionExtensions
         where TProvider : class, IAuthStateProvider
     {
         AddOptions(services, configure);
+        services.AddSingleton<IBaileysEventEmitter, BaileysEventEmitter>();
         services.AddSingleton<IAuthStateProvider, TProvider>();
         return services;
     }

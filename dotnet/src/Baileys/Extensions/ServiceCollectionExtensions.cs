@@ -57,7 +57,7 @@ public static class ServiceCollectionExtensions
 	)
 	{
 		AddOptions(services, configure);
-		services.AddSingleton<IBaileysEventEmitter, BaileysEventEmitter>();
+		AddBaileysCore(services);
 		services.AddSingleton<IAuthStateProvider, InMemoryAuthStateProvider>();
 		return services;
 	}
@@ -84,7 +84,7 @@ public static class ServiceCollectionExtensions
 	)
 	{
 		AddOptions(services, configure);
-		services.AddSingleton<IBaileysEventEmitter, BaileysEventEmitter>();
+		AddBaileysCore(services);
 		services.AddSingleton<IAuthStateProvider>(_ => new FileAuthStateProvider(filePath));
 		return services;
 	}
@@ -120,6 +120,7 @@ public static class ServiceCollectionExtensions
 	)
 	{
 		AddOptions(services, configure);
+		AddBaileysCore(services);
 		services.AddSingleton<IAuthStateProvider>(_ => new DirectoryAuthStateProvider(directory));
 		return services;
 	}
@@ -145,7 +146,7 @@ public static class ServiceCollectionExtensions
 		where TProvider : class, IAuthStateProvider
 	{
 		AddOptions(services, configure);
-		services.AddSingleton<IBaileysEventEmitter, BaileysEventEmitter>();
+		AddBaileysCore(services);
 		services.AddSingleton<IAuthStateProvider, TProvider>();
 		return services;
 	}
@@ -159,5 +160,13 @@ public static class ServiceCollectionExtensions
 		var builder = services.AddOptions<BaileysOptions>();
 		if (configure is not null)
 			builder.Configure(configure);
+	}
+
+	private static void AddBaileysCore(IServiceCollection services)
+	{
+		services.AddSingleton<IBaileysEventEmitter, BaileysEventEmitter>();
+		services.AddSingleton<BaileysClient>();
+		services.AddSingleton<ILogger>(_ => new ConsoleLogger());
+		services.AddHostedService<BaileysClientHostedService>();
 	}
 }

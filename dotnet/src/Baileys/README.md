@@ -50,81 +50,58 @@ Full documentation is available in the [`docs/`](../../docs/) folder:
 - **Structured Logging** — `ILogger` interface + `NullLogger` and `ConsoleLogger` implementations
 - **Dependency Injection** — `AddBaileys()`, `AddBaileysWithFileStorage()`, `AddBaileysWithDirectoryStorage()`, `AddBaileysWithProvider<T>()` helpers
 - **Pluggable Session Storage** — `IAuthStateProvider` interface with in-memory, file-based, and directory-based implementations
+- **Automatic Session Initiation** — `BaileysClient` and `BaileysClientHostedService` automatically manage the WebSocket connection, Noise handshake, and QR code lifecycle
 
 ## Quick Start
 
 ```csharp
+using Baileys;
 using Baileys.Types;
 using Baileys.Utils;
-using Baileys.WABinary;
-using Baileys.Defaults;
 using Baileys.Extensions;
-using Baileys.Session;
 
 // ── Dependency injection (Program.cs) ────────────────────────────────────────
-// In-memory session (no persistence):
-builder.Services.AddBaileys(o => o.PhoneNumber = "15551234567");
-
-// File-based credentials only:
-builder.Services.AddBaileysWithFileStorage("creds.json", o => o.PhoneNumber = "15551234567");
-
-// Directory-based session — mirrors TypeScript useMultiFileAuthState("baileys_auth_info")
-// Stores creds.json + one file per Signal key under the given directory:
+// This will automatically initiate a session and print the QR code to the console
+// when the application starts.
 builder.Services.AddBaileysWithDirectoryStorage(
     directory: "baileys_auth_info",
-    configure: o => o.PhoneNumber = "15551234567");
+    configure: o => 
+    {
+        o.PhoneNumber = "15551234567";
+        o.PrintQrInTerminal = true; // Default is true
+    });
 
-// ── Load full AuthenticationState (creds + Signal keys) ──────────────────────
-// Works with any IAuthStateProvider:
-IAuthStateProvider provider = new DirectoryAuthStateProvider("baileys_auth_info");
-AuthenticationState state = await provider.LoadAuthStateAsync();
-// state.Creds — AuthenticationCreds for the handshake
-// state.Keys  — ISignalKeyStore with all Signal protocol keys
+// ── Manual Connection (optional) ────────────────────────────────────────────
+// If you prefer manual control, you can inject BaileysClient:
+public class MyService(BaileysClient client)
+{
+    public async Task StartAsync()
+    {
+        // Subscribe to events
+        client.Ev.On<ConnectionUpdateEvent>("connection.update", update => {
+            if(update.Connection == WaConnectionState.Open) {
+                Console.WriteLine("Connected!");
+            }
+        });
 
-// Or with an explicit key store:
-var keys  = new InMemorySignalKeyStore();
-var state2 = await provider.LoadAuthStateAsync(keys: keys);
-
-// ── Credential initialisation ─────────────────────────────────────────────────
-var creds = AuthUtils.InitAuthCreds();
-Console.WriteLine($"Registration ID: {creds.RegistrationId}");
-
-// ── JID utilities ─────────────────────────────────────────────────────────────
-var jid     = JidUtils.JidDecode("123456789@s.whatsapp.net");
-var isGroup = JidUtils.IsJidGroup("120363000000001@g.us");    // true
-
-// ── Crypto ────────────────────────────────────────────────────────────────────
-var key = Crypto.RandomBytes(32);
-var iv  = Crypto.RandomBytes(12);
-var ct  = Crypto.AesEncryptGcm("Hello WhatsApp!"u8, key, iv, ReadOnlySpan<byte>.Empty);
-var pt  = Crypto.AesDecryptGcm(ct, key, iv, ReadOnlySpan<byte>.Empty);
-
-// ── WABinary round-trip ───────────────────────────────────────────────────────
-var node    = new BinaryNode { Tag = "iq", Attrs = new() { ["type"] = "get" } };
-var wire    = WaBinaryEncoder.EncodeBinaryNode(node);
-var decoded = await WaBinaryDecoder.DecodeBinaryNodeAsync(wire);
-
-// ── Browser description ───────────────────────────────────────────────────────
-var browser = Browsers.MacOs("Chrome");   // ["Mac OS", "Chrome", "14.4.1"]
-
-// ── Typed Signal key access ───────────────────────────────────────────────────
-var store = new InMemorySignalKeyStore();
-var kp    = new KeyPair([1, 2, 3], [4, 5, 6]);
-await store.SetPreKeysAsync(new Dictionary<string, KeyPair?> { ["1"] = kp });
-var preKeys = await store.GetPreKeysAsync(["1"]);
+        await client.ConnectAsync();
+    }
+}
 ```
 
 ## Namespace Map
 
 | Namespace | Contents |
 |-----------|-----------|
+| `Baileys` | `BaileysClient` |
 | `Baileys.Types` | All domain types and enums, `ISignalKeyStore`, `SignalDataTypes`, `AuthenticationState`, `SignalKeyStoreExtensions`, `TcToken` |
 | `Baileys.Utils` | `Crypto`, `JidUtils`, `AuthUtils`, `Generics`, `NoiseHandler`, `ILogger` |
 | `Baileys.WABinary` | `WaBinaryEncoder`, `WaBinaryDecoder`, `WaBinaryConstants` |
 | `Baileys.Defaults` | `BaileysDefaults`, `Browsers` |
 | `Baileys.Options` | `BaileysOptions` |
 | `Baileys.Session` | `IAuthStateProvider`, `InMemoryAuthStateProvider`, `FileAuthStateProvider`, `DirectoryAuthStateProvider`, `InMemorySignalKeyStore`, `DirectorySignalKeyStore` |
-| `Baileys.Extensions` | `ServiceCollectionExtensions`, `AuthStateExtensions` |
+| `Baileys.Extensions` | `ServiceCollectionExtensions`, `AuthStateExtensions`, `BaileysClientHostedService` |
+| `Baileys.Socket` | `BaileysSocket` |
 
 ## Requirements
 

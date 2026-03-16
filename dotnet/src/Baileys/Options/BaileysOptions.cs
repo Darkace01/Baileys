@@ -39,4 +39,10 @@ public sealed class BaileysOptions
     /// new message arrives in them.  Mirrors the TypeScript <c>AccountSettings.unarchiveChats</c>.
     /// </summary>
     public bool UnarchiveChats { get; set; }
+
+    /// <summary>
+    /// When <see langword="true"/>, the QR code is automatically printed to the terminal
+    /// when it arrives.  Defaults to <see langword="true"/>.
+    /// </summary>
+    public bool PrintQrInTerminal { get; set; } = true;
 }

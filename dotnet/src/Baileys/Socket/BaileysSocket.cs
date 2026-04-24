@@ -45,6 +45,7 @@ public sealed class BaileysSocket : IAsyncDisposable
 
 	private bool _handshakeComplete;
 	private bool _isClosed;
+	private bool _sentIntro;
 
 	// Pending query completions keyed by message id
 	private readonly ConcurrentDictionary<string, TaskCompletionSource<BinaryNode>> _waits = new();
@@ -98,10 +99,10 @@ public sealed class BaileysSocket : IAsyncDisposable
 		await _ws.ConnectAsync(new Uri(url), cancellationToken).ConfigureAwait(false);
 		_logger.Info("WebSocket connected.");
 
-		// ── Send intro header (routing info prefix + "WA" + version bytes) ──
-		await _ws.SendAsync(_noise.IntroHeader, WebSocketMessageType.Binary, true, cancellationToken)
-			.ConfigureAwait(false);
-		_logger.Debug("Sent intro header.");
+		// ── Send intro header + ClientHello ──
+		var clientHello = BuildClientHelloProto();
+		await SendFramedAsync(clientHello, cancellationToken).ConfigureAwait(false);
+		_logger.Debug("Sent intro header and ClientHello.");
 
 		// ── Start receive loop ──
 		_receiveTask = ReceiveLoopAsync(_cts.Token);
@@ -115,15 +116,7 @@ public sealed class BaileysSocket : IAsyncDisposable
 		var encoded = WaBinaryEncoder.EncodeBinaryNode(node);
 		var encrypted = _noise.Encrypt(encoded);
 
-		// Frame: 3 bytes big-endian length + payload
-		var frame = new byte[encrypted.Length + 3];
-		frame[0] = (byte)((encrypted.Length >> 16) & 0xFF);
-		frame[1] = (byte)((encrypted.Length >> 8) & 0xFF);
-		frame[2] = (byte)(encrypted.Length & 0xFF);
-		encrypted.CopyTo(frame, 3);
-
-		await _ws.SendAsync(frame.AsMemory(), WebSocketMessageType.Binary, true, cancellationToken)
-			.ConfigureAwait(false);
+		await SendFramedAsync(encrypted, cancellationToken).ConfigureAwait(false);
 		_logger.Trace($"Sent node: {node.Tag}");
 	}
 
@@ -303,7 +296,7 @@ public sealed class BaileysSocket : IAsyncDisposable
 
 		// Serialise as Protobuf HandshakeMessage { ClientFinish { static, payload } }
 		var clientFinishBytes = BuildClientFinishProto(noiseKeyEncrypted, clientPayloadEnc);
-		await SendRawAsync(clientFinishBytes, _cts.Token).ConfigureAwait(false);
+		await SendFramedAsync(clientFinishBytes, _cts.Token).ConfigureAwait(false);
 
 		// Switch noise to transport mode
 		_noise.Finish();
@@ -320,12 +313,7 @@ public sealed class BaileysSocket : IAsyncDisposable
 	/// </summary>
 	private void MixSharedKeyIntoNoise(byte[] sharedSecret)
 	{
-		// In Noise XX this maps to MixKey(DH(...))
-		// which internally does HKDF then updates enc/dec keys.
-		// We expose it through NoiseHandler.MixHash plus an extra internal step.
-		// For simplicity we call our Encrypt/Decrypt with the WA-specific approach below.
-		// (The full mix happens inside NoiseHandler.Encrypt / .Decrypt during the handshake phase.)
-		_noise.MixHash(sharedSecret);
+		_noise.MixIntoKey(sharedSecret);
 	}
 
 	// ──────────────────────────────────────────────────────────────────────────
@@ -583,9 +571,21 @@ public sealed class BaileysSocket : IAsyncDisposable
 		return $"{_uniqueTagId}{_epoch++}";
 	}
 
-	private async Task SendRawAsync(byte[] bytes, CancellationToken cancellationToken)
+	private async Task SendFramedAsync(byte[] data, CancellationToken cancellationToken)
 	{
-		await _ws.SendAsync(bytes.AsMemory(), WebSocketMessageType.Binary, true, cancellationToken)
+		var intro = !_sentIntro ? _noise.IntroHeader.ToArray() : Array.Empty<byte>();
+		_sentIntro = true;
+
+		var frame = new byte[intro.Length + 3 + data.Length];
+		intro.CopyTo(frame, 0);
+
+		int offset = intro.Length;
+		frame[offset] = (byte)((data.Length >> 16) & 0xFF);
+		frame[offset + 1] = (byte)((data.Length >> 8) & 0xFF);
+		frame[offset + 2] = (byte)(data.Length & 0xFF);
+		data.CopyTo(frame, offset + 3);
+
+		await _ws.SendAsync(frame.AsMemory(), WebSocketMessageType.Binary, true, cancellationToken)
 			.ConfigureAwait(false);
 	}
 

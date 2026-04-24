@@ -64,6 +64,10 @@ public sealed class NoiseHandler
 		{
 			_introHeader = [.. noiseHeader];
 		}
+
+		// Initial authentication of the protocol header and our ephemeral public key
+		Authenticate(noiseHeader);
+		Authenticate(_keyPair.Public);
 	}
 
 	// ──────────────────────────────────────────────────────────
@@ -192,12 +196,13 @@ public sealed class NoiseHandler
 		return iv;
 	}
 
-	private byte[] MixIntoKey(ReadOnlySpan<byte> data)
+	public void MixIntoKey(ReadOnlySpan<byte> data)
 	{
-		var hmac1 = Crypto.HmacSha256(data, _salt);
-		var hmac2 = Crypto.HmacSha256([1], hmac1);
-		_salt = hmac1;
-		_encKey = Crypto.HmacSha256([2], hmac1);
-		return [.. hmac2, .. Crypto.HmacSha256([3], hmac1)];
+		var expanded = Crypto.Hkdf(data.ToArray(), 64, _salt, Array.Empty<byte>());
+		_salt = expanded[..32];
+		_encKey = expanded[32..];
+		_decKey = _encKey;
+		_writeCounter = 0;
+		_readCounter = 0;
 	}
 }

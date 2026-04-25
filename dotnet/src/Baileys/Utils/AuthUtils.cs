@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Baileys.Types;
 
 namespace Baileys.Utils;
@@ -50,14 +51,14 @@ public static class AuthUtils
     /// </summary>
     public static KeyPair GenerateKeyPair()
     {
-        // Use NSec's X25519 key generation
         var privateKeyBytes = Crypto.RandomBytes(32);
         // Clamp the private key per RFC 7748 §5
-        privateKeyBytes[0]  &= 248;
+        privateKeyBytes[0] &= 248;
         privateKeyBytes[31] &= 127;
         privateKeyBytes[31] |= 64;
 
-        var publicKeyBytes = Curve25519MultiplyBasePoint(privateKeyBytes);
+        var privKeyParams = new Org.BouncyCastle.Crypto.Parameters.X25519PrivateKeyParameters(privateKeyBytes, 0);
+        var publicKeyBytes = privKeyParams.GeneratePublicKey().GetEncoded();
         return new KeyPair(Public: publicKeyBytes, Private: privateKeyBytes);
     }
 
@@ -67,12 +68,13 @@ public static class AuthUtils
     /// </summary>
     public static byte[] DiffieHellman(byte[] privateKey, byte[] publicKey)
     {
-        // Clamp the private key per RFC 7748 §5
-        var priv = (byte[])privateKey.Clone();
-        priv[0]  &= 248;
-        priv[31] &= 127;
-        priv[31] |= 64;
-        return Curve25519(priv, publicKey);
+        var priv = new Org.BouncyCastle.Crypto.Parameters.X25519PrivateKeyParameters(privateKey, 0);
+        var pub = new Org.BouncyCastle.Crypto.Parameters.X25519PublicKeyParameters(publicKey, 0);
+        var agreement = new Org.BouncyCastle.Crypto.Agreement.X25519Agreement();
+        agreement.Init(priv);
+        var result = new byte[32];
+        agreement.CalculateAgreement(pub, result, 0);
+        return result;
     }
 
     // ──────────────────────────────────────────────────────────

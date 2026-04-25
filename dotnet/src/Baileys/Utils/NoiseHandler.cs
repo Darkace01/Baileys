@@ -21,6 +21,7 @@ public sealed class NoiseHandler
 	private byte[] _salt;
 	private byte[] _encKey;
 	private byte[] _decKey;
+	private int _handshakeCounter;
 	private int _writeCounter;
 	private int _readCounter;
 	private bool _transportEstablished;
@@ -86,9 +87,8 @@ public sealed class NoiseHandler
 	{
 		if (!_transportEstablished)
 		{
-			Authenticate(plaintext);
-			var iv = GenerateIv(_writeCounter++);
-			var ciphertext = Crypto.AesEncryptGcm(plaintext, _encKey, iv, ReadOnlySpan<byte>.Empty);
+			var iv = GenerateIv(_handshakeCounter++);
+			var ciphertext = Crypto.AesEncryptGcm(plaintext, _encKey, iv, _hash);
 			Authenticate(ciphertext);
 			return ciphertext;
 		}
@@ -105,10 +105,9 @@ public sealed class NoiseHandler
 	{
 		if (!_transportEstablished)
 		{
+			var iv = GenerateIv(_handshakeCounter++);
+			var plaintext = Crypto.AesDecryptGcm(ciphertext, _decKey, iv, _hash);
 			Authenticate(ciphertext);
-			var iv = GenerateIv(_readCounter++);
-			var plaintext = Crypto.AesDecryptGcm(ciphertext, _decKey, iv, ReadOnlySpan<byte>.Empty);
-			Authenticate(plaintext);
 			return plaintext;
 		}
 		else
@@ -202,7 +201,6 @@ public sealed class NoiseHandler
 		_salt = expanded[..32];
 		_encKey = expanded[32..];
 		_decKey = _encKey;
-		_writeCounter = 0;
-		_readCounter = 0;
+		_handshakeCounter = 0;
 	}
 }

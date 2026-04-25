@@ -199,10 +199,7 @@ public sealed class BaileysSocket : IAsyncDisposable
 				if (result.MessageType == WebSocketMessageType.Binary)
 				{
 					var data = buffer[..totalRead];
-					_ = Task.Run(
-						async () => await HandleMessageAsync(data).ConfigureAwait(false),
-						cancellationToken
-					);
+					await HandleMessageAsync(data).ConfigureAwait(false);
 				}
 			}
 		}
@@ -222,27 +219,38 @@ public sealed class BaileysSocket : IAsyncDisposable
 
 	private async Task HandleMessageAsync(byte[] data)
 	{
-		try
+		int offset = 0;
+		while (offset + 3 <= data.Length)
 		{
-			if (!_handshakeComplete)
+			var len = (data[offset] << 16) | (data[offset + 1] << 8) | data[offset + 2];
+			if (offset + 3 + len > data.Length)
 			{
-				await HandleHandshakeResponseAsync(data).ConfigureAwait(false);
-				return;
+				_logger.Warn($"Truncated frame received: expected {len} bytes, got {data.Length - offset - 3}");
+				break;
 			}
 
-			// Post-handshake: [3-byte-length] + [encrypted payload]
-			if (data.Length < 3)
-				return;
-			var encrypted = data[3..];
-			var decrypted = _noise.Decrypt(encrypted);
-			var node = await WaBinaryDecoder.DecodeBinaryNodeAsync(decrypted).ConfigureAwait(false);
+			var payload = data[(offset + 3)..(offset + 3 + len)];
+			offset += 3 + len;
 
-			_logger.Trace($"Received node: {node.Tag}");
-			await DispatchNodeAsync(node).ConfigureAwait(false);
-		}
-		catch (Exception ex)
-		{
-			_logger.Error($"Error handling message: {ex.Message}");
+			try
+			{
+				if (!_handshakeComplete)
+				{
+					await HandleHandshakeResponseAsync(payload).ConfigureAwait(false);
+				}
+				else
+				{
+					var decrypted = _noise.Decrypt(payload);
+					var node = await WaBinaryDecoder.DecodeBinaryNodeAsync(decrypted).ConfigureAwait(false);
+
+					_logger.Trace($"Received node: {node.Tag}");
+					await DispatchNodeAsync(node).ConfigureAwait(false);
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.Error($"Error handling frame: {ex.Message}");
+			}
 		}
 	}
 
@@ -250,13 +258,13 @@ public sealed class BaileysSocket : IAsyncDisposable
 	//  Noise XX handshake
 	// ──────────────────────────────────────────────────────────────────────────
 
-	private async Task HandleHandshakeResponseAsync(byte[] data)
+	private async Task HandleHandshakeResponseAsync(byte[] payload)
 	{
 		// ── Message 2: Server → Client (ServerHello containing the server's ephemeral public key) ──
-		// Encoded as a minimal Protobuf HandshakeMessage: field 2 = ServerHello, field 1 = ephemeral (32 bytes).
+		// Encoded as a minimal Protobuf HandshakeMessage: field 3 = ServerHello, field 1 = ephemeral (32 bytes).
 		// Parse manually: [tag|type] [varint len] [payload]
 		// We only need to extract the 32-byte server ephemeral and the 48-byte server static + 16-byte payload.
-		var parsedHandshake = ParseHandshakeProto(data);
+		var parsedHandshake = ParseHandshakeProto(payload);
 
 		if (parsedHandshake.ServerHello is null)
 		{
@@ -289,6 +297,10 @@ public sealed class BaileysSocket : IAsyncDisposable
 		// ── Message 3: Client → Server (ClientFinish) ────────────────────────
 		// Encrypt our noise key (static key) so the server can verify us
 		var noiseKeyEncrypted = _noise.Encrypt(_creds.NoiseKey.Public);
+
+		// DH(client_static, server_eph)
+		var sharedStaticEph = AuthUtils.DiffieHellman(_creds.NoiseKey.Private, serverEphemeral);
+		MixSharedKeyIntoNoise(sharedStaticEph);
 
 		// Build client payload (registration node)
 		var clientPayloadBytes = BuildClientPayload();
@@ -633,28 +645,85 @@ public sealed class BaileysSocket : IAsyncDisposable
 	private byte[] BuildClientPayload()
 	{
 		// Minimal ClientPayload protobuf for a new (unregistered) session:
-		// field 1  (connectType, varint)     = 1 (WIFI_UNKNOWN)
-		// field 2  (connectReason, varint)   = 1 (USER_ACTIVATED)
+		// field 12 (connectType, varint)     = 1 (WIFI_UNKNOWN)
+		// field 13 (connectReason, varint)   = 1 (USER_ACTIVATED)
 		// field 5  (userAgent, message)      → nested
-		// field 16 (webInfo, message)        → nested
+		// field 6  (webInfo, message)        → nested
+		// field 19 (devicePairingData, message) → nested
 
 		using var ms = new MemoryStream();
 		using var w = new BinaryWriter(ms);
 
-		// field 1: connectType = 1
-		WriteProtoVarintField(w, 1, 0, 1);
-		// field 2: connectReason = 1
-		WriteProtoVarintField(w, 2, 0, 1);
+		// field 12: connectType = 1
+		WriteProtoVarintField(w, 12, 0, 1);
+		// field 13: connectReason = 1
+		WriteProtoVarintField(w, 13, 0, 1);
 
-		// field 5: userAgent (nested message)
-		// We build it separately then embed it.
+		// field 5: userAgent
 		var userAgent = BuildUserAgentProto();
 		WriteProtoLenDelimitedField(w, 5, userAgent);
 
-		// field 16: webInfo (nested message) { webSubPlatform = WEB_BROWSER (0) }
+		// field 6: webInfo
 		var webInfo = BuildWebInfoProto();
-		WriteProtoLenDelimitedField(w, 16, webInfo);
+		WriteProtoLenDelimitedField(w, 6, webInfo);
 
+		// field 19: devicePairingData (Required for new sessions to trigger QR/pairing)
+		var pairingData = BuildDevicePairingDataProto();
+		WriteProtoLenDelimitedField(w, 19, pairingData);
+
+		return ms.ToArray();
+	}
+
+	private byte[] BuildDevicePairingDataProto()
+	{
+		using var ms = new MemoryStream();
+		using var w = new BinaryWriter(ms);
+
+		// field 1: eRegid (bytes)
+		var regId = new byte[4];
+		System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(regId, (uint)_creds.RegistrationId);
+		WriteProtoLenDelimitedField(w, 1, regId);
+
+		// field 2: eKeytype (bytes) = [5]
+		WriteProtoLenDelimitedField(w, 2, [5]);
+
+		// field 3: eIdent (bytes)
+		WriteProtoLenDelimitedField(w, 3, _creds.SignedIdentityKey.Public);
+
+		// field 4: eSkeyId (bytes) - 3 bytes big-endian
+		var sKeyId = new byte[3];
+		sKeyId[0] = (byte)(_creds.SignedPreKey.KeyId >> 16);
+		sKeyId[1] = (byte)(_creds.SignedPreKey.KeyId >> 8);
+		sKeyId[2] = (byte)(_creds.SignedPreKey.KeyId & 0xFF);
+		WriteProtoLenDelimitedField(w, 4, sKeyId);
+
+		// field 5: eSkeyVal (bytes)
+		WriteProtoLenDelimitedField(w, 5, _creds.SignedPreKey.KeyPair.Public);
+
+		// field 6: eSkeySig (bytes)
+		WriteProtoLenDelimitedField(w, 6, _creds.SignedPreKey.Signature);
+
+		// field 7: buildHash (bytes) - MD5 of version
+		var ver = string.Join(".", BaileysDefaults.BaileysVersion);
+		using var md5 = System.Security.Cryptography.MD5.Create();
+		var hash = md5.ComputeHash(Encoding.UTF8.GetBytes(ver));
+		WriteProtoLenDelimitedField(w, 7, hash);
+
+		// field 8: deviceProps
+		var props = BuildDevicePropsProto();
+		WriteProtoLenDelimitedField(w, 8, props);
+
+		return ms.ToArray();
+	}
+
+	private byte[] BuildDevicePropsProto()
+	{
+		using var ms = new MemoryStream();
+		using var w = new BinaryWriter(ms);
+		// field 1: os (string)
+		WriteProtoStringField(w, 1, "Baileys.NET");
+		// field 3: platformType (varint) = CHROME = 1
+		WriteProtoVarintField(w, 3, 0, 1);
 		return ms.ToArray();
 	}
 
@@ -662,34 +731,28 @@ public sealed class BaileysSocket : IAsyncDisposable
 	{
 		// UserAgent message fields:
 		// field 1: platform (varint) = WEB = 14
-		// field 6: mcc (string) = "000"
-		// field 7: mnc (string) = "000"
-		// field 8: osVersion (string)  = "0.1"
-		// field 9: manufacturer (string)
-		// field 10: device (string)
-		// field 11: osBuildNumber (string) = "0.1"
-		// field 12: localeLanguageIso6391 (string) = "en"
-		// field 13: localeCountryIso31661Alpha2 (string) = "en"
-		// field 4: appVersion (nested)
 		using var ms = new MemoryStream();
 		using var w = new BinaryWriter(ms);
 		WriteProtoVarintField(w, 1, 0, 14); // platform = WEB
 
-		// appVersion (field 4): major=2 minor=<patch>…  simplified as current baileys version
+		// appVersion (field 2)
 		var (major, minor, patch) = (
 			BaileysDefaults.BaileysVersion[0],
 			BaileysDefaults.BaileysVersion[1],
 			BaileysDefaults.BaileysVersion[2]
 		);
 		var appVersion = BuildAppVersionProto(major, minor, patch);
-		WriteProtoLenDelimitedField(w, 4, appVersion);
+		WriteProtoLenDelimitedField(w, 2, appVersion);
 
-		WriteProtoStringField(w, 6, "000");
-		WriteProtoStringField(w, 7, "000");
-		WriteProtoStringField(w, 8, "0.1");
-		WriteProtoStringField(w, 11, "0.1");
-		WriteProtoStringField(w, 12, "en");
-		WriteProtoStringField(w, 13, "en");
+		WriteProtoStringField(w, 3, "000"); // mcc
+		WriteProtoStringField(w, 4, "000"); // mnc
+		WriteProtoStringField(w, 5, "0.1"); // osVersion
+		WriteProtoStringField(w, 6, "");    // manufacturer
+		WriteProtoStringField(w, 7, "Desktop"); // device
+		WriteProtoStringField(w, 8, "0.1"); // osBuildNumber
+		WriteProtoVarintField(w, 10, 0, 0); // releaseChannel = RELEASE (0)
+		WriteProtoStringField(w, 11, "en"); // localeLanguageIso6391
+		WriteProtoStringField(w, 12, "US"); // localeCountryIso31661Alpha2
 		return ms.ToArray();
 	}
 
@@ -707,8 +770,8 @@ public sealed class BaileysSocket : IAsyncDisposable
 	{
 		using var ms = new MemoryStream();
 		using var w = new BinaryWriter(ms);
-		// webSubPlatform = 0 (WEB_BROWSER)
-		WriteProtoVarintField(w, 1, 0, 0);
+		// webSubPlatform = 4, value = 0 (WEB_BROWSER)
+		WriteProtoVarintField(w, 4, 0, 0);
 		return ms.ToArray();
 	}
 
@@ -717,9 +780,9 @@ public sealed class BaileysSocket : IAsyncDisposable
 	// ──────────────────────────────────────────────────────────────────────────
 
 	// HandshakeMessage proto field numbers:
-	//   1 = ClientHello    (message: ephemeral bytes, field 1)
-	//   2 = ServerHello    (message: ephemeral bytes field 1, static field 2, payload field 3)
-	//   3 = ClientFinish   (message: static field 1, payload field 2)
+	//   2 = ClientHello    (message: ephemeral bytes, field 1)
+	//   3 = ServerHello    (message: ephemeral bytes field 1, static field 2, payload field 3)
+	//   4 = ClientFinish   (message: static field 1, payload field 2)
 
 	/// <summary>
 	/// Builds the ClientHello Protobuf bytes:
@@ -729,8 +792,8 @@ public sealed class BaileysSocket : IAsyncDisposable
 	{
 		// Build ClientHello { ephemeral = _ephemeralKeyPair.Public }
 		var clientHello = BuildLenDelimitedMessage(1, _ephemeralKeyPair.Public);
-		// Wrap in HandshakeMessage { field 1 = message }
-		return BuildLenDelimitedMessage(1, clientHello);
+		// Wrap in HandshakeMessage { field 2 = message }
+		return BuildLenDelimitedMessage(2, clientHello);
 	}
 
 	/// <summary>
@@ -751,8 +814,8 @@ public sealed class BaileysSocket : IAsyncDisposable
 		}
 		var cfBytes = cf.ToArray();
 
-		// HandshakeMessage { ClientFinish (field 3) }
-		WriteProtoLenDelimitedField(w, 3, cfBytes);
+		// HandshakeMessage { ClientFinish (field 4) }
+		WriteProtoLenDelimitedField(w, 4, cfBytes);
 		return ms.ToArray();
 	}
 
@@ -781,7 +844,7 @@ public sealed class BaileysSocket : IAsyncDisposable
 			var value = data[pos..(pos + len)];
 			pos += len;
 
-			if (fieldNum == 2) // ServerHello
+			if (fieldNum == 3) // ServerHello
 			{
 				// Parse ServerHello:  ephemeral=1, static=2, payload=3
 				byte[]? eph = null,
